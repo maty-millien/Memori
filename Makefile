@@ -22,7 +22,7 @@ clean:
 # Project rules ———————————————————————————————————————————————————————————————
 
 run:
-	$(PYTHON) src/cli.py
+	$(PYTHON) src/main.py
 
 tidy:
 	$(ENV_DIR)/bin/mypy $(SOURCE_DIR)
