@@ -11,12 +11,9 @@ PYTHON = PYTHONPYCACHEPREFIX=$(PYCACHE_DIR) $(PYTHON_BIN)
 
 # Environment —————————————————————————————————————————————————————————————————
 
-env:
+env: clean
 	uv venv $(ENV_DIR) --python $(PYTHON_VERSION)
 	uv pip install --python $(PYTHON_BIN) --group app --group dev
-
-sync:
-	uv pip install --python $(PYTHON_BIN) --upgrade --group app --group dev
 
 clean:
 	rm -rf $(ENV_DIR)
