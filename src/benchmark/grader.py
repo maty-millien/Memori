@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, cast
 
-from core.engine import Memory, MemoryEngine, MemoryKind, Scope
+from core.engine import Memory, MemoryEngine, Scope
 from core.llm import ToolCall, call_with_tools, judge_trait
 
 
@@ -28,7 +28,6 @@ class ScenarioResult:
 def _memory_from_dict(raw: dict[str, Any]) -> Memory:
     return Memory(
         id=raw["id"],
-        kind=cast(MemoryKind, raw["kind"]),
         content=raw["content"],
         scope=cast(Scope, raw.get("scope", "topical")),
     )
@@ -48,7 +47,7 @@ def _log_initial_memories(log: LogFn, memories: list[dict[str, Any]]) -> None:
         return
     log("Initial memories:")
     for m in memories:
-        log(f"  - {m['id']} [{m['kind']}] {m['content']}")
+        log(f"  - {m['id']} {m['content']}")
 
 
 def _log_snapshot(log: LogFn, engine: MemoryEngine) -> None:
@@ -58,7 +57,7 @@ def _log_snapshot(log: LogFn, engine: MemoryEngine) -> None:
         return
     log("Final memory state:")
     for m in snap:
-        log(f"  - {m.id} [{m.kind}] {m.content}")
+        log(f"  - {m.id} {m.content}")
 
 
 def _log_result(log: LogFn, status: Status, failures: list[str]) -> None:
@@ -137,8 +136,6 @@ def _call_matches(actual: ToolCall, expected: dict[str, Any]) -> bool:
     if expected.get("name") != actual.name:
         return False
     args = expected.get("arguments") or {}
-    if "kind" in args and args["kind"] != actual.arguments.get("kind"):
-        return False
     if "memory_id" in args and args["memory_id"] != actual.arguments.get("memory_id"):
         return False
     if "memory_id_regex" in args and not re.search(
@@ -157,7 +154,6 @@ def _apply_tool_call(call: ToolCall, engine: MemoryEngine) -> None:
         if call.name == "memory.write":
             engine.write(
                 call.arguments.get("content", ""),
-                cast(MemoryKind, call.arguments.get("kind", "note")),
                 cast(Scope, call.arguments.get("scope", "topical")),
             )
         elif call.name == "memory.update":
@@ -199,7 +195,7 @@ def grade_memory_tool_call(
     if not injected:
         log("  (none)")
     for m in injected:
-        log(f"  - {m.id} [{m.kind}] {m.content}")
+        log(f"  - {m.id} {m.content}")
 
     result = call_with_tools(user_content, injected)
     log("")
@@ -234,33 +230,15 @@ def grade_memory_tool_call(
     log("")
     _log_snapshot(log, engine)
 
-    failures: list[str] = []
     expected = scenario.get("expected", {}) or {}
-
-    for ec in expected.get("tool_calls", []) or []:
-        if not any(_call_matches(ac, ec) for ac in result.tool_calls):
-            failures.append(
-                f"expected tool call {ec!r} not satisfied "
-                f"(actual={[(c.name, c.arguments) for c in result.tool_calls]})"
-            )
-
-    for fc in expected.get("forbidden_tool_calls", []) or []:
-        offenders = [
-            (c.name, c.arguments) for c in result.tool_calls if _call_matches(c, fc)
-        ]
-        if offenders:
-            failures.append(f"forbidden tool call {fc!r} matched {offenders}")
-
-    count_spec = expected.get("final_memory_count", {}) or {}
-    final_count = len(engine.snapshot())
-    if "min" in count_spec and final_count < count_spec["min"]:
-        failures.append(
-            f"final memory count {final_count} below min {count_spec['min']}"
+    failures = _check_tool_calls(result.tool_calls, expected)
+    failures.extend(
+        _check_count_spec(
+            len(engine.snapshot()),
+            expected.get("final_memory_count", {}) or {},
+            "final",
         )
-    if "max" in count_spec and final_count > count_spec["max"]:
-        failures.append(
-            f"final memory count {final_count} above max {count_spec['max']}"
-        )
+    )
 
     status: Status = "failed" if failures else "passed"
     _log_result(log, status, failures)
@@ -275,41 +253,46 @@ def grade_memory_tool_call(
 def _check_tool_calls(
     actual: list[ToolCall],
     expected: dict[str, Any],
-    context: str,
+    context: str = "",
 ) -> list[str]:
+    prefix = f"{context} " if context else ""
     failures: list[str] = []
     for ec in expected.get("tool_calls", []) or []:
         if not any(_call_matches(ac, ec) for ac in actual):
             failures.append(
-                f"{context} expected tool call {ec!r} not satisfied "
+                f"{prefix}expected tool call {ec!r} not satisfied "
                 f"(actual={[(c.name, c.arguments) for c in actual]})"
             )
     for fc in expected.get("forbidden_tool_calls", []) or []:
         offenders = [(c.name, c.arguments) for c in actual if _call_matches(c, fc)]
         if offenders:
-            failures.append(f"{context} forbidden tool call {fc!r} matched {offenders}")
+            failures.append(f"{prefix}forbidden tool call {fc!r} matched {offenders}")
     return failures
 
 
-def _check_count_spec(count: int, spec: dict[str, Any], context: str) -> list[str]:
+def _check_count_spec(count: int, spec: dict[str, Any], context: str = "") -> list[str]:
+    prefix = f"{context} " if context else ""
     failures: list[str] = []
     if "min" in spec and count < spec["min"]:
-        failures.append(f"{context} memory count {count} below min {spec['min']}")
+        failures.append(f"{prefix}memory count {count} below min {spec['min']}")
     if "max" in spec and count > spec["max"]:
-        failures.append(f"{context} memory count {count} above max {spec['max']}")
+        failures.append(f"{prefix}memory count {count} above max {spec['max']}")
     return failures
 
 
-def _check_content_patterns(text: str, spec: dict[str, Any], context: str) -> list[str]:
+def _check_content_patterns(
+    text: str, spec: dict[str, Any], context: str = ""
+) -> list[str]:
+    prefix = f"{context} " if context else ""
     failures: list[str] = []
     for matcher in spec.get("should_match", []) or []:
         pattern = matcher["regex"]
         if not re.search(pattern, text):
-            failures.append(f"{context} did not match regex {pattern!r}")
+            failures.append(f"{prefix}did not match regex {pattern!r}")
     for matcher in spec.get("should_not_match", []) or []:
         pattern = matcher["regex"]
         if re.search(pattern, text):
-            failures.append(f"{context} unexpectedly matched regex {pattern!r}")
+            failures.append(f"{prefix}unexpectedly matched regex {pattern!r}")
     return failures
 
 

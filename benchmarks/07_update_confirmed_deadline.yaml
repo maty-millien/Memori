@@ -2,7 +2,6 @@ id: 07_update_confirmed_deadline
 type: memory_tool_call
 initial_memories:
   - id: mem_deadline_uncertain
-    kind: fact
     content: The final presentation might be on Friday, but the information is uncertain.
 turns:
   - role: user

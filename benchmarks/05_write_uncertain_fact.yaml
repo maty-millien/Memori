@@ -8,7 +8,6 @@ expected:
   tool_calls:
     - name: memory.write
       arguments:
-        kind: fact
         content_regex: (?i)(?=.*\bpresentation\b)(?=.*\bFriday\b)(?=.*\b(uncertain|unsure|not sure|might|maybe|possibly|tentative|not confirmed)\b)
   forbidden_tool_calls:
     - name: memory.update

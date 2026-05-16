@@ -15,14 +15,12 @@ from core.openrouter import get_client
 Embedding = Sequence[float] | Sequence[int]
 
 
-MemoryKind = Literal["preference", "project", "fact", "note"]
 Scope = Literal["global", "topical"]
 
 
 @dataclass
 class Memory:
     id: str
-    kind: MemoryKind
     content: str
     scope: Scope = "topical"
 
@@ -67,7 +65,7 @@ class MemoryEngine:
             ids=[m.id for m in memories],
             documents=contents,
             embeddings=_embed(contents),
-            metadatas=[{"kind": m.kind, "scope": m.scope} for m in memories],
+            metadatas=[{"scope": m.scope} for m in memories],
         )
 
     def retrieve(self, query: str, top_k: int) -> list[Retrieved]:
@@ -96,7 +94,6 @@ class MemoryEngine:
                 continue
             memory = Memory(
                 id=mid,
-                kind=cast(MemoryKind, meta["kind"]),
                 content=doc,
                 scope=cast(Scope, meta.get("scope", "topical")),
             )
@@ -124,7 +121,6 @@ class MemoryEngine:
                 continue
             memory = Memory(
                 id=mid,
-                kind=cast(MemoryKind, meta["kind"]),
                 content=doc,
                 scope="global",
             )
@@ -137,27 +133,26 @@ class MemoryEngine:
             )
         return extras
 
-    def write(self, content: str, kind: MemoryKind, scope: Scope = "topical") -> Memory:
+    def write(self, content: str, scope: Scope = "topical") -> Memory:
         new_id = f"mem_auto_{next(self._auto_id)}"
         self._collection.add(
             ids=[new_id],
             documents=[content],
             embeddings=_embed([content]),
-            metadatas=[{"kind": kind, "scope": scope}],
+            metadatas=[{"scope": scope}],
         )
-        return Memory(id=new_id, kind=kind, content=content, scope=scope)
+        return Memory(id=new_id, content=content, scope=scope)
 
     def update(self, memory_id: str, content: str) -> Memory:
         meta = self._meta_of(memory_id)
-        kind = cast(MemoryKind, meta["kind"])
         scope = cast(Scope, meta.get("scope", "topical"))
         self._collection.update(
             ids=[memory_id],
             documents=[content],
             embeddings=_embed([content]),
-            metadatas=[{"kind": kind, "scope": scope}],
+            metadatas=[{"scope": scope}],
         )
-        return Memory(id=memory_id, kind=kind, content=content, scope=scope)
+        return Memory(id=memory_id, content=content, scope=scope)
 
     def delete(self, memory_id: str) -> None:
         self._collection.delete(ids=[memory_id])
@@ -170,7 +165,6 @@ class MemoryEngine:
         return [
             Memory(
                 id=mid,
-                kind=cast(MemoryKind, meta["kind"]),
                 content=doc,
                 scope=cast(Scope, meta.get("scope", "topical")),
             )

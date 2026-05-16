@@ -2,7 +2,6 @@ id: 06_update_existing_preference
 type: memory_tool_call
 initial_memories:
   - id: mem_report_style
-    kind: preference
     content: User prefers very detailed technical reports with many explanations.
 turns:
   - role: user

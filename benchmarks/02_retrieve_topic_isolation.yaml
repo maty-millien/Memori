@@ -2,10 +2,8 @@ id: 02_retrieve_topic_isolation
 type: retrieval_injection
 initial_memories:
   - id: mem_cli
-    kind: project
     content: TaskFlow should provide a Python CLI with add, list, complete, and search commands.
   - id: mem_workout
-    kind: preference
     content: User prefers running workouts in the morning.
 turns:
   - role: user

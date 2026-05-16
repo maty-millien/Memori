@@ -8,7 +8,6 @@ expected:
   tool_calls:
     - name: memory.write
       arguments:
-        kind: preference
         content_regex: (?i)(?=.*\bcode\b)(?=.*\b(short|concise|brief|concrete|practical)\b)
   forbidden_tool_calls:
     - name: memory.update

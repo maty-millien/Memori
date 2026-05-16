@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
+import chromadb
 from dotenv import load_dotenv
 
 from benchmark.grader import ScenarioResult, grade
@@ -43,7 +44,9 @@ def main() -> None:
             buf: list[str] = []
             return grade(sc, MemoryEngine(), buf.append), buf
 
-        MemoryEngine()  # warm chromadb client before fanning out
+        # First-init of chromadb.Client() races on tenant validation when
+        # called concurrently from threads; do it once on the main thread.
+        chromadb.Client()
         with ThreadPoolExecutor() as ex:
             pairs = list(ex.map(_run, scenarios))
         for _, buf in pairs:

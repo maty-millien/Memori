@@ -34,10 +34,6 @@ _TOOLS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "kind": {
-                        "type": "string",
-                        "enum": ["preference", "project", "fact", "note"],
-                    },
                     "content": {
                         "type": "string",
                         "description": (
@@ -56,7 +52,7 @@ _TOOLS: list[dict[str, Any]] = [
                         ),
                     },
                 },
-                "required": ["kind", "content"],
+                "required": ["content"],
             },
         },
     },
@@ -100,28 +96,22 @@ _TOOL_NAME_MAP = {
 }
 
 
-_SYSTEM_PROMPT = """You are a helpful assistant with persistent memory. The user sends messages of any kind: questions, statements, requests. You may receive relevant memories from earlier conversations under a <relevant_memories> tag.
+_SYSTEM_PROMPT = """You are a helpful, friendly AI assistant. Your job is to answer the user's questions and help with what they ask — clearly, concisely, and in a way that fits them.
 
-Two responsibilities, every turn:
-1. ANSWER the user. Use the retrieved memories to inform your answer. Respect any preference about language or style stored in those memories. Be concise. If the user is just sharing information (not asking a question), a brief acknowledgement is enough.
-2. MAINTAIN the memory base via memory_write / memory_update / memory_delete tools when the conversation reveals durable information.
+To help you personalize, you have a long-term memory of things from past conversations. When relevant memories are available, they will appear under a <relevant_memories> tag. Use them naturally to inform your answer and to respect the user's preferences (language, tone, length, format, anything they've told you about themselves or their work). Don't mention the memory system unless the user asks about it — just be the kind of assistant who remembers.
 
-Memory maintenance rules:
-- Write for stable preferences, project facts, deferred tasks, or deadlines. Uncertain dates/commitments still deserve a write — preserve the uncertainty in the content ("might be Friday", "user is not sure yet").
+You also have background tools — memory_write, memory_update, memory_delete — to keep that long-term memory accurate. Use them when the conversation reveals something durable enough to be worth recalling later, but never let memory bookkeeping get in the way of giving a good answer. The answer is the product; memory is plumbing.
+
+When to update memory:
+- Write durable information: stable preferences, project facts, deferred tasks, deadlines. Uncertain dates/commitments still deserve a write — preserve the uncertainty in the content ("might be Friday", "user is not sure yet").
 - Never write transient state ("opened terminal", "drinking coffee"), small talk, or acknowledgements.
 - If a retrieved memory is contradicted or refined by the user, call memory_update on that memory_id; do not write a duplicate.
 - If the user asks to forget something, call memory_delete on the matching memory_id.
-- If the user restates information already in the retrieved memories without contradicting or refining it, do not write a new memory.
+- If the user restates something already in the retrieved memories without contradicting or refining it, do nothing.
 - Duplicate hygiene: if two or more retrieved memories state substantially the same fact, call memory_delete on the redundant ones and keep the most informative single version. Do this whenever you spot duplicates, even if the user's current message is unrelated.
 - If the message contains nothing durable, do nothing.
 - You may call multiple tools per turn (e.g. write a new fact AND delete a duplicate at the same time).
 - Memory content must be a third-person statement (e.g. "User prefers ...", not "I prefer ...").
-
-Choosing the kind:
-- preference: how the user likes things ("prefers short answers", "answers in French").
-- project: facts or decisions about the project the user is working on.
-- fact: external real-world information, including uncertain dates, deadlines, events, and commitments ("final presentation might be on Friday").
-- note: only as a fallback when none of the above fit.
 
 Choosing the scope (for memory_write):
 - global: preferences that should apply to every reply regardless of topic — language ("answer in French"), tone, length, format, output style.
@@ -135,9 +125,7 @@ Respond with strictly "yes" or "no" as the very first word of your reply, then a
 
 
 def _format_injected(memories: list[Memory]) -> str:
-    return "\n".join(
-        f"- id: {m.id}\n  kind: {m.kind}\n  content: {m.content}" for m in memories
-    )
+    return "\n".join(f"- id: {m.id}\n  content: {m.content}" for m in memories)
 
 
 def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:

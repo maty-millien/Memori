@@ -2,7 +2,6 @@ id: 08_delete_forget_request
 type: memory_tool_call
 initial_memories:
   - id: mem_workout
-    kind: preference
     content: User prefers running in the morning.
 turns:
   - role: user

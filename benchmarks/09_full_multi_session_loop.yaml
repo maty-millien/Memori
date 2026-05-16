@@ -12,11 +12,9 @@ sessions:
       tool_calls:
         - name: memory.write
           arguments:
-            kind: fact
             content_regex: (?i)(?=.*\bTokyo\b)(?=.*\bJune\b)
         - name: memory.write
           arguments:
-            kind: preference
             content_regex: (?i)(?=.*\b(hostel|budget)\b)
       final_memory_count:
         min: 2

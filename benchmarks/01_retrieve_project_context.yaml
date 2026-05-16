@@ -2,10 +2,8 @@ id: 01_retrieve_project_context
 type: retrieval_injection
 initial_memories:
   - id: mem_project
-    kind: project
     content: User is building TaskFlow, a CLI-based task management tool.
   - id: mem_running
-    kind: preference
     content: User prefers running in the morning rather than in the evening.
 turns:
   - role: user
