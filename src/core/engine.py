@@ -129,9 +129,6 @@ class MemoryEngine:
     def delete(self, memory_id: str) -> None:
         self._collection.delete(ids=[memory_id])
 
-    def consolidate(self) -> None:
-        return None
-
     def snapshot(self) -> list[Memory]:
         result = self._collection.get()
         ids = result["ids"]

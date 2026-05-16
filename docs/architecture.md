@@ -29,9 +29,8 @@ The LLM can still maintain memory through explicit tools:
 This keeps responsibilities separated:
 
 - the system retrieves relevant memory
-- the LLM answers and proposes memory changes
+- the LLM answers and proposes memory changes (including pruning duplicates it sees in the retrieved set)
 - the database stores durable memories
-- the consolidator cleans up duplicates, noise, and obsolete information
 
 ## High-Level Flow
 
@@ -40,9 +39,8 @@ User message
   -> automatic retrieval from memory database
   -> inject relevant memories into LLM context
   -> LLM answers with memory metadata available
-  -> LLM may call write/update/delete tools
+  -> LLM may call write/update/delete tools (including delete on duplicates)
   -> memory changes are saved
-  -> after the session, consolidation cleans the memory base
 ```
 
 ## Context Injection
@@ -138,27 +136,25 @@ Later versions can add:
 
 The retrieval system should produce both selected memories and an explanation of why they were selected.
 
-## Consolidation
+## Write-Time Hygiene
 
-Consolidation should run after a chat session, not necessarily after every single turn.
+There is no separate consolidation pass. The LLM is responsible for keeping the memory base clean at write time, every time it is invoked with a user turn and retrieved memories:
 
-The consolidator should:
+- if the user message restates an existing retrieved memory, write nothing
+- if the user message contradicts or refines a retrieved memory, call `memory.update`
+- if the retrieved set contains two or more memories stating substantially the same fact, call `memory.delete` on the redundant ones and keep the most informative single version
+- if the user asks to forget something, call `memory.delete`
 
-- merge duplicated memories
-- replace obsolete memories when newer information contradicts them
-- remove weak or noisy memories
-- preserve important stable information
-- update confidence
-- keep an audit trail when possible
+This collapses what a traditional consolidator would do into the same loop that already runs on every turn. The bet is that retrieval + the LLM at write time is sufficient; a periodic consolidation pass can be added later if the benchmark shows duplicates or obsolete entries slipping through.
 
-This makes the architecture easier to build incrementally:
+Roadmap:
 
 ```text
 V0: benchmark scenarios + scenario loader (current)
 V1: automatic retrieval + memory write tool
 V2: add update/delete tools
-V3: add session-end consolidation
-V4: add stronger scoring, conflict handling, and explainability
+V3: stronger scoring, conflict handling, explainability
+V4: (optional) periodic consolidation if write-time hygiene proves insufficient
 ```
 
 ## Benchmark Implications
@@ -168,11 +164,10 @@ The benchmark should evaluate the architecture as separate components first, the
 The core scenario types are:
 
 - `retrieval_injection`
-- `memory_tool_call`
-- `session_consolidation`
+- `memory_tool_call` (covers write, update, delete, including duplicate pruning)
 - `full_loop`
 
-This keeps failures diagnosable. If the full loop fails, the smaller component scenarios should reveal whether the issue is retrieval, tool-call behavior, or consolidation.
+This keeps failures diagnosable. If the full loop fails, the smaller component scenarios should reveal whether the issue is retrieval or tool-call behavior.
 
 ### Retrieval Injection
 
@@ -212,7 +207,7 @@ expected:
       - regex: (?i)\bMemori\b.*\b(memory|memories)\b.*\b(LLM|LLMs|conversation)
 ```
 
-Each memory carries a `kind` label (`preference`, `project`, `fact`, `note`) so retrieval and consolidation can reason about category, not just embedding similarity.
+Each memory carries a `kind` label (`preference`, `project`, `fact`, `note`) so retrieval and write-time tool decisions can reason about category, not just embedding similarity.
 
 ### Memory Tool Calls
 
@@ -286,48 +281,15 @@ expected:
     max: 0
 ```
 
-### Consolidation
-
-Consolidation scenarios test the post-session cleanup step without running a chat.
-
-```yaml
-type: session_consolidation
-pre_consolidation_memories:
-  - id: mem_1
-    kind: project
-    content: Memori is an external memory layer for LLMs.
-  - id: mem_2
-    kind: project
-    content: Memori gives language models durable memory.
-  - id: mem_3
-    kind: note
-    content: User opened a terminal.
-  - id: mem_4
-    kind: preference
-    content: User prefers answers in French.
-expected:
-  final_memory_count:
-    min: 2
-    max: 2
-  final_memories:
-    should_match:
-      - kind: project
-        regex: (?i)\bMemori\b.*\b(memory|memories)\b.*\b(LLM|LLMs|language models?)\b
-      - kind: preference
-        regex: (?i)\bFrench\b
-    should_not_match:
-      - regex: (?i)\bterminal\b
-```
-
 ### Full Loop
 
-Full-loop scenarios chain several fresh-context chats and a final consolidation step in a single file:
+Full-loop scenarios chain several fresh-context chats and assert the final memory state:
 
 ```text
 chat 1 -> automatic retrieval -> LLM memory tool calls
 chat 2 with fresh context -> automatic retrieval -> LLM updates memory
 chat 3 with fresh context -> automatic retrieval -> answer
-session end -> consolidation
+end of run -> assertions over final_state
 ```
 
 ```yaml
@@ -364,13 +326,13 @@ sessions:
       answer_traits:
         - The answer is in French.
         - The answer mentions comparing with-memory and without-memory behavior.
-post_session_consolidation:
+final_state:
   expected:
     final_memory_count: { min: 2, max: 3 }
     final_memories:
       should_match:
         - regex: (?i)\bFrench\b
-        - regex: (?i)\bMemori\b.*\bCLI\b.*\bdemo\b
+        - regex: (?i)(?=.*\bMemori\b)(?=.*\bCLI\b)(?=.*\bdemo\b)
 ```
 
 These scenarios are useful for the final demo, but they should not replace focused component tests.
@@ -380,11 +342,11 @@ Across all scenario types, expectations should avoid exact memory wording. A goo
 Instead, scenarios should check:
 
 - how many memories were created
-- whether created memories match expected regex patterns
+- whether created memories match expected regex patterns (use lookahead form `(?=.*A)(?=.*B)` to stay order-independent)
 - whether noisy details were not stored
 - whether retrieval included the right memory labels
 - whether retrieval excluded irrelevant memories
-- whether consolidation removed duplicates or obsolete facts
+- whether duplicate or obsolete memories were pruned at write time
 
 This catches the important failure mode: if a scenario contains only two durable facts but the system creates ten memories, the benchmark should fail even if some of those memories are technically true.
 
@@ -392,7 +354,7 @@ This catches the important failure mode: if a scenario contains only two durable
 
 The repository currently contains the benchmark spec, not the runtime:
 
-- `benchmarks/` — ten scenario YAML files covering retrieval injection (×2), memory tool calls for write/update/delete and noise rejection (×6), session consolidation (×1), and a multi-session full loop (×1).
+- `benchmarks/` — nine scenario YAML files covering retrieval injection (×2), memory tool calls for write/update/delete and noise rejection (×6), and a multi-session full loop (×1).
 - `src/benchmark/` — a loader (`loader.py`) that parses every YAML file in `benchmarks/` into a list of dicts, and a `main` entry point (`make benchmark`) that prints the scenario count. There is no execution or grading logic; the recent refactor explicitly removed it so the harness can be rebuilt around the agreed scenario format.
 - `src/cli/` — placeholder only; the user-facing CLI is not implemented.
 - `src/core/` — empty. No retriever, no memory store, no tool implementations yet.

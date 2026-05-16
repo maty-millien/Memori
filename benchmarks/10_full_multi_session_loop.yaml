@@ -58,7 +58,7 @@ sessions:
         - name: memory.write
           arguments:
             content_regex: (?i)\bdemo\b
-post_session_consolidation:
+final_state:
   expected:
     final_memory_count:
       min: 2
