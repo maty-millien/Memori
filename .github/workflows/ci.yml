@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruff:
+    name: Ruff (lint + format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: python3 -m venv .ci-venv
+      - run: .ci-venv/bin/python -m pip install "ruff>=0.6.0"
+      - run: .ci-venv/bin/ruff check src
+      - run: .ci-venv/bin/ruff format --check src
+
+  mypy:
+    name: Mypy (types)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: python3 -m venv .ci-venv
+      - run: .ci-venv/bin/python -m pip install "mypy>=1.11.0" "types-PyYAML>=6.0.12"
+      - run: .ci-venv/bin/mypy src

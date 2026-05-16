@@ -1,0 +1,3 @@
+[dependency-groups]
+app = []
+dev = ["mypy", "pytest", "ruff"]
