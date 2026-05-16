@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 from benchmark.grader import ScenarioResult, grade
 from benchmark.loader import load_scenarios
@@ -13,17 +14,6 @@ _SYMBOLS = {"passed": "PASS", "failed": "FAIL", "skipped": "SKIP"}
 _RUNS_DIR = Path("runs")
 
 
-def _load_dotenv(path: Path = Path(".env")) -> None:
-    if not path.exists():
-        return
-    for raw in path.read_text().splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
-
-
 def _summarize(results: list[ScenarioResult]) -> tuple[int, int, int]:
     passed = sum(1 for r in results if r.status == "passed")
     failed = sum(1 for r in results if r.status == "failed")
@@ -32,7 +22,7 @@ def _summarize(results: list[ScenarioResult]) -> tuple[int, int, int]:
 
 
 def main() -> None:
-    _load_dotenv()
+    load_dotenv()
     _RUNS_DIR.mkdir(exist_ok=True)
     log_path = (
         _RUNS_DIR / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.log"

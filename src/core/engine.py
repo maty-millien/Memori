@@ -4,7 +4,7 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import count
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import chromadb
 import httpx
@@ -14,13 +14,14 @@ Embedding = Sequence[float] | Sequence[int]
 
 
 MemoryKind = Literal["preference", "project", "fact", "note"]
+Scope = Literal["global", "topical"]
 
 
 _EMBEDDING_MODEL = os.environ.get(
     "MEMORI_EMBEDDING_MODEL", "perplexity/pplx-embed-v1-4b"
 )
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/embeddings"
-_MIN_SCORE = float(os.environ.get("MEMORI_RETRIEVAL_MIN_SCORE", "0.2"))
+_MIN_SCORE = float(os.environ.get("MEMORI_RETRIEVAL_MIN_SCORE", "0.15"))
 
 
 @dataclass
@@ -28,6 +29,7 @@ class Memory:
     id: str
     kind: MemoryKind
     content: str
+    scope: Scope = "topical"
 
 
 @dataclass
@@ -60,10 +62,10 @@ class MemoryEngine:
         )
         self._auto_id = count(1)
 
-    def _kind_of(self, memory_id: str) -> MemoryKind:
+    def _meta_of(self, memory_id: str) -> dict[str, Any]:
         result = self._collection.get(ids=[memory_id])
         metadatas = result.get("metadatas") or []
-        return cast(MemoryKind, metadatas[0]["kind"])
+        return dict(metadatas[0])
 
     def seed(self, memories: list[Memory]) -> None:
         existing_ids = self._collection.get()["ids"]
@@ -76,13 +78,13 @@ class MemoryEngine:
             ids=[m.id for m in memories],
             documents=contents,
             embeddings=_embed(contents),
-            metadatas=[{"kind": m.kind} for m in memories],
+            metadatas=[{"kind": m.kind, "scope": m.scope} for m in memories],
         )
 
     def retrieve(self, query: str, top_k: int) -> list[Retrieved]:
         total = self._collection.count()
         if total == 0 or top_k <= 0:
-            return []
+            return self._global_extras(set())
         result = self._collection.query(
             query_embeddings=_embed([query]),
             n_results=min(top_k, total),
@@ -92,11 +94,17 @@ class MemoryEngine:
         distances = (result.get("distances") or [[]])[0]
         metadatas = (result.get("metadatas") or [[]])[0]
         out: list[Retrieved] = []
+        kept_ids: set[str] = set()
         for mid, doc, dist, meta in zip(ids, documents, distances, metadatas):
             score = 1.0 - float(dist)
             if score < _MIN_SCORE:
                 continue
-            memory = Memory(id=mid, kind=cast(MemoryKind, meta["kind"]), content=doc)
+            memory = Memory(
+                id=mid,
+                kind=cast(MemoryKind, meta["kind"]),
+                content=doc,
+                scope=cast(Scope, meta.get("scope", "topical")),
+            )
             out.append(
                 Retrieved(
                     memory=memory,
@@ -104,27 +112,57 @@ class MemoryEngine:
                     reason=f"cosine similarity {score:.3f}",
                 )
             )
+            kept_ids.add(mid)
+        out.extend(self._global_extras(kept_ids))
         return out
 
-    def write(self, content: str, kind: MemoryKind) -> Memory:
+    def _global_extras(self, exclude_ids: set[str]) -> list[Retrieved]:
+        result = self._collection.get()
+        ids = result["ids"]
+        documents = result.get("documents") or []
+        metadatas = result.get("metadatas") or []
+        extras: list[Retrieved] = []
+        for mid, doc, meta in zip(ids, documents, metadatas):
+            if mid in exclude_ids:
+                continue
+            if meta.get("scope") != "global":
+                continue
+            memory = Memory(
+                id=mid,
+                kind=cast(MemoryKind, meta["kind"]),
+                content=doc,
+                scope="global",
+            )
+            extras.append(
+                Retrieved(
+                    memory=memory,
+                    score=1.0,
+                    reason="global scope (always injected)",
+                )
+            )
+        return extras
+
+    def write(self, content: str, kind: MemoryKind, scope: Scope = "topical") -> Memory:
         new_id = f"mem_auto_{next(self._auto_id)}"
         self._collection.add(
             ids=[new_id],
             documents=[content],
             embeddings=_embed([content]),
-            metadatas=[{"kind": kind}],
+            metadatas=[{"kind": kind, "scope": scope}],
         )
-        return Memory(id=new_id, kind=kind, content=content)
+        return Memory(id=new_id, kind=kind, content=content, scope=scope)
 
     def update(self, memory_id: str, content: str) -> Memory:
-        kind = self._kind_of(memory_id)
+        meta = self._meta_of(memory_id)
+        kind = cast(MemoryKind, meta["kind"])
+        scope = cast(Scope, meta.get("scope", "topical"))
         self._collection.update(
             ids=[memory_id],
             documents=[content],
             embeddings=_embed([content]),
-            metadatas=[{"kind": kind}],
+            metadatas=[{"kind": kind, "scope": scope}],
         )
-        return Memory(id=memory_id, kind=kind, content=content)
+        return Memory(id=memory_id, kind=kind, content=content, scope=scope)
 
     def delete(self, memory_id: str) -> None:
         self._collection.delete(ids=[memory_id])
@@ -135,6 +173,11 @@ class MemoryEngine:
         documents = result.get("documents") or []
         metadatas = result.get("metadatas") or []
         return [
-            Memory(id=mid, kind=cast(MemoryKind, meta["kind"]), content=doc)
+            Memory(
+                id=mid,
+                kind=cast(MemoryKind, meta["kind"]),
+                content=doc,
+                scope=cast(Scope, meta.get("scope", "topical")),
+            )
             for mid, doc, meta in zip(ids, documents, metadatas)
         ]

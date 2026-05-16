@@ -51,6 +51,16 @@ _TOOLS: list[dict[str, Any]] = [
                             "that survives outside the current chat."
                         ),
                     },
+                    "scope": {
+                        "type": "string",
+                        "enum": ["global", "topical"],
+                        "description": (
+                            "Use 'global' for preferences about response language, "
+                            "tone, length, or format that apply to every reply "
+                            "regardless of topic. Use 'topical' (default) for "
+                            "everything else, including domain-specific preferences."
+                        ),
+                    },
                 },
                 "required": ["kind", "content"],
             },
@@ -96,17 +106,21 @@ _TOOL_NAME_MAP = {
 }
 
 
-_SYSTEM_PROMPT = """You are Memori's memory manager. Decide whether the user's latest message contains durable information worth saving.
+_SYSTEM_PROMPT = """You are a helpful assistant with persistent memory. The user sends messages of any kind: questions, statements, requests. You may receive relevant memories from earlier conversations under a <relevant_memories> tag.
 
-Rules:
-- Call memory_write for stable preferences, project facts, deferred tasks, or deadlines. Uncertain dates/commitments still deserve a write — preserve the uncertainty in the content ("might be Friday", "user is not sure yet").
+Two responsibilities, every turn:
+1. ANSWER the user. Use the retrieved memories to inform your answer. Respect any preference about language or style stored in those memories. Be concise. If the user is just sharing information (not asking a question), a brief acknowledgement is enough.
+2. MAINTAIN the memory base via memory_write / memory_update / memory_delete tools when the conversation reveals durable information.
+
+Memory maintenance rules:
+- Write for stable preferences, project facts, deferred tasks, or deadlines. Uncertain dates/commitments still deserve a write — preserve the uncertainty in the content ("might be Friday", "user is not sure yet").
 - Never write transient state ("opened terminal", "drinking coffee"), small talk, or acknowledgements.
-- If a relevant memory is provided and the user contradicts or refines it, call memory_update on that memory_id; do not write a new one.
+- If a retrieved memory is contradicted or refined by the user, call memory_update on that memory_id; do not write a duplicate.
 - If the user asks to forget something, call memory_delete on the matching memory_id.
-- If the user's message restates information already in the retrieved memories without contradicting or refining it, do not write a new memory.
+- If the user restates information already in the retrieved memories without contradicting or refining it, do not write a new memory.
 - Duplicate hygiene: if two or more retrieved memories state substantially the same fact, call memory_delete on the redundant ones and keep the most informative single version. Do this whenever you spot duplicates, even if the user's current message is unrelated.
 - If the message contains nothing durable, do nothing.
-- You may call multiple tools if the user's message contains several distinct durable facts or if you need to clean up duplicates while also writing.
+- You may call multiple tools per turn (e.g. write a new fact AND delete a duplicate at the same time).
 - Memory content must be a third-person statement (e.g. "User prefers ...", not "I prefer ...").
 
 Choosing the kind:
@@ -114,7 +128,16 @@ Choosing the kind:
 - project: facts or decisions about the project the user is working on.
 - fact: external real-world information, including uncertain dates, deadlines, events, and commitments ("final presentation might be on Friday").
 - note: only as a fallback when none of the above fit.
+
+Choosing the scope (for memory_write):
+- global: preferences that should apply to every reply regardless of topic — language ("answer in French"), tone, length, format, output style.
+- topical: everything else, including domain-specific preferences ("prefers running in the morning", "prefers oat milk"). Default if you are unsure.
 """
+
+
+_JUDGE_PROMPT = """You are a strict evaluator. Given an assistant's answer and a trait that should hold true about that answer, decide whether it holds.
+
+Respond with strictly "yes" or "no" as the very first word of your reply, then a short reason on the same line."""
 
 
 def _format_injected(memories: list[Memory]) -> str:
@@ -178,3 +201,38 @@ def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
         user_message=user_message,
         assistant_message=assistant_message,
     )
+
+
+@dataclass
+class JudgeVerdict:
+    passed: bool
+    reason: str
+
+
+def judge_trait(answer: str, trait: str) -> JudgeVerdict:
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY must be set to call the judge")
+
+    user_message = f"ASSISTANT ANSWER:\n---\n{answer}\n---\n\nTRAIT TO VERIFY:\n{trait}"
+    response = httpx.post(
+        _OPENROUTER_URL,
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={
+            "model": _MODEL,
+            "messages": [
+                {"role": "system", "content": _JUDGE_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+            "reasoning": {"effort": "low"},
+        },
+        timeout=120.0,
+    )
+    response.raise_for_status()
+    body = response.json()
+    content = ""
+    for choice in body.get("choices", []):
+        content = choice.get("message", {}).get("content", "") or ""
+    first_line = content.strip().split("\n", 1)[0].strip().lower()
+    passed = first_line.startswith("yes")
+    return JudgeVerdict(passed=passed, reason=content.strip())

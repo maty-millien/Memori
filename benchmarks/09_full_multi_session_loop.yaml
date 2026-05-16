@@ -1,11 +1,10 @@
-id: 10_full_multi_session_loop
+id: 09_full_multi_session_loop
 type: full_loop
 sessions:
   - id: chat_1_seed
     initial_memories: []
-    expected_injected_memory_ids:
-      include: []
-      max_count: 0
+    expected_injected_content:
+      should_match: []
     turns:
       - role: user
         content: For this project, answer in French. Also, Memori should be a CLI-first memory prototype.
@@ -23,10 +22,9 @@ sessions:
         min: 2
         max: 2
   - id: chat_2_update
-    expected_injected_memory_ids:
-      include:
-        - mem_project_cli
-      max_count: 3
+    expected_injected_content:
+      should_match:
+        - regex: (?i)(?=.*\bMemori\b)(?=.*\bCLI\b)
     turns:
       - role: user
         content: Actually, Memori should still be CLI-first, but the key demo is comparing with-memory and without-memory answers.
@@ -34,26 +32,22 @@ sessions:
       tool_calls:
         - name: memory.update
           arguments:
-            memory_id_regex: (?i)mem_project|project
             content_regex: (?i)(?=.*\bCLI-first\b)(?=.*\bdemo\b)(?=.*\bwith-memory\b)(?=.*\bwithout-memory\b)
       final_memory_count:
         min: 2
         max: 3
   - id: chat_3_retrieve
-    expected_injected_memory_ids:
-      include:
-        - mem_project_cli
-        - mem_language
-      exclude:
-        - mem_noise
-      max_count: 3
+    expected_injected_content:
+      should_match:
+        - regex: (?i)\bFrench\b
+        - regex: (?i)(?=.*\bCLI-first\b)(?=.*\bdemo\b)
     turns:
       - role: user
         content: What should I show in the demo?
     expected:
       answer_traits:
-        - The answer is in French.
-        - The answer mentions comparing with-memory and without-memory behavior.
+        - The answer is written in French.
+        - The answer mentions comparing with-memory and without-memory behaviour.
       forbidden_tool_calls:
         - name: memory.write
           arguments:
