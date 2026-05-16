@@ -8,7 +8,8 @@ from itertools import count
 from typing import Any, Literal, cast
 
 import chromadb
-import httpx
+
+from core.openrouter import get_client
 
 
 Embedding = Sequence[float] | Sequence[int]
@@ -16,9 +17,6 @@ Embedding = Sequence[float] | Sequence[int]
 
 MemoryKind = Literal["preference", "project", "fact", "note"]
 Scope = Literal["global", "topical"]
-
-
-_OPENROUTER_URL = "https://openrouter.ai/api/v1/embeddings"
 
 
 @dataclass
@@ -37,20 +35,11 @@ class Retrieved:
 
 
 def _embed(texts: list[str]) -> list[Embedding]:
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY must be set to compute embeddings")
     embedding_model = os.environ.get("MEMORI_EMBEDDING_MODEL")
     if not embedding_model:
         raise RuntimeError("MEMORI_EMBEDDING_MODEL must be set to compute embeddings")
-    response = httpx.post(
-        _OPENROUTER_URL,
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={"model": embedding_model, "input": texts},
-        timeout=30.0,
-    )
-    response.raise_for_status()
-    return [cast(Embedding, item["embedding"]) for item in response.json()["data"]]
+    body = get_client().embeddings(embedding_model, texts)
+    return [cast(Embedding, item["embedding"]) for item in body["data"]]
 
 
 class MemoryEngine:

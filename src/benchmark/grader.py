@@ -84,7 +84,7 @@ def grade_retrieval_injection(
 
     expected = scenario.get("expected", {}) or {}
     ids_spec = expected.get("injected_memory_ids", {}) or {}
-    max_count = ids_spec.get("max_count", 5)
+    max_count = ids_spec.get("max_count", 10)
 
     retrieved = engine.retrieve(query, top_k=max_count)
     retrieved_ids = [r.memory.id for r in retrieved]
@@ -193,7 +193,7 @@ def grade_memory_tool_call(
     log("")
     log(f"User turn: {user_content}")
 
-    injected = [r.memory for r in engine.retrieve(user_content, top_k=5)]
+    injected = [r.memory for r in engine.retrieve(user_content, top_k=10)]
     log("")
     log("Injected memories (sent to LLM):")
     if not injected:
@@ -343,7 +343,7 @@ def grade_full_loop(
         log(f"User turn: {user_content}")
 
         injected_content_spec = session.get("expected_injected_content", {}) or {}
-        max_count = injected_content_spec.get("max_count", 5)
+        max_count = injected_content_spec.get("max_count", 10)
 
         retrieved = engine.retrieve(user_content, top_k=max_count)
         log("")

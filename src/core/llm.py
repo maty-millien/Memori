@@ -5,12 +5,8 @@ import os
 from dataclasses import dataclass
 from typing import Any, cast
 
-import httpx
-
 from core.engine import Memory
-
-
-_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+from core.openrouter import get_client
 
 
 @dataclass
@@ -145,9 +141,6 @@ def _format_injected(memories: list[Memory]) -> str:
 
 
 def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY must be set to call the LLM")
     model = os.environ.get("MEMORI_LLM_MODEL")
     if not model:
         raise RuntimeError("MEMORI_LLM_MODEL must be set to call the LLM")
@@ -163,10 +156,8 @@ def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
     else:
         user_message = user_content
 
-    response = httpx.post(
-        _OPENROUTER_URL,
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={
+    body = get_client().chat_completions(
+        {
             "model": model,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
@@ -174,11 +165,8 @@ def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
             ],
             "tools": _TOOLS,
             "reasoning": {"effort": reasoning_effort},
-        },
-        timeout=180.0,
+        }
     )
-    response.raise_for_status()
-    body = response.json()
 
     calls: list[ToolCall] = []
     assistant_message: dict[str, Any] = {}
@@ -214,18 +202,13 @@ class JudgeVerdict:
 
 
 def judge_trait(answer: str, trait: str) -> JudgeVerdict:
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY must be set to call the judge")
     model = os.environ.get("MEMORI_LLM_MODEL")
     if not model:
         raise RuntimeError("MEMORI_LLM_MODEL must be set to call the judge")
 
     user_message = f"ASSISTANT ANSWER:\n---\n{answer}\n---\n\nTRAIT TO VERIFY:\n{trait}"
-    response = httpx.post(
-        _OPENROUTER_URL,
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={
+    body = get_client().chat_completions(
+        {
             "model": model,
             "messages": [
                 {"role": "system", "content": _JUDGE_PROMPT},
@@ -235,8 +218,6 @@ def judge_trait(answer: str, trait: str) -> JudgeVerdict:
         },
         timeout=120.0,
     )
-    response.raise_for_status()
-    body = response.json()
     content = ""
     for choice in body.get("choices", []):
         content = choice.get("message", {}).get("content", "") or ""
