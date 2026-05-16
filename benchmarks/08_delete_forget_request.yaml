@@ -1,31 +1,21 @@
 id: 08_delete_forget_request
-title: LLM deletes a memory when the user asks to forget it
 type: memory_tool_call
-focus:
-- memory_delete
-- user_control
-- privacy
 initial_memories:
-- id: mem_workout
-  kind: preference
-  content: User prefers running in the morning.
-  confidence: high
-injected_memory_ids:
-- mem_workout
+  - id: mem_workout
+    kind: preference
+    content: User prefers running in the morning.
 turns:
-- role: user
-  content: Forget what I said about preferring morning runs.
+  - role: user
+    content: Forget what I said about preferring morning runs.
 expected:
   tool_calls:
-  - name: memory.delete
-    arguments:
-      memory_id: mem_workout
-      reason_regex: (?i)\buser\b.*\b(forget|delete|remove)\b|\bforget\b.*\brequest\b
+    - name: memory.delete
+      arguments:
+        memory_id: mem_workout
   forbidden_tool_calls:
-  - name: memory.write
-    arguments:
-      content_regex: (?i)\bmorning runs?\b|\brunning in the morning\b
+    - name: memory.write
+      arguments:
+        content_regex: (?i)\bmorning runs?\b|\brunning in the morning\b
   final_memory_count:
     min: 0
     max: 0
-

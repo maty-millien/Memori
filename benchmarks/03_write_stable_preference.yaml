@@ -1,26 +1,18 @@
 id: 03_write_stable_preference
-title: LLM writes a durable user preference
 type: memory_tool_call
-focus:
-- memory_write
-- preference_detection
-- tool_call_decision
 initial_memories: []
-injected_memory_ids: []
 turns:
-- role: user
-  content: For code explanations, I prefer short but concrete answers.
+  - role: user
+    content: For code explanations, I prefer short but concrete answers.
 expected:
   tool_calls:
-  - name: memory.write
-    arguments:
-      kind: preference
-      content_regex: (?i)\bcode\b.*\b(short|concise|brief)\b.*\b(concrete|practical)\b
-      confidence: high
+    - name: memory.write
+      arguments:
+        kind: preference
+        content_regex: (?i)\bcode\b.*\b(short|concise|brief)\b.*\b(concrete|practical)\b
   forbidden_tool_calls:
-  - name: memory.update
-  - name: memory.delete
+    - name: memory.update
+    - name: memory.delete
   final_memory_count:
     min: 1
     max: 1
-

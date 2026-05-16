@@ -27,3 +27,11 @@ jobs:
       - run: python3 -m venv .ci-venv
       - run: .ci-venv/bin/python -m pip install "mypy>=1.11.0" "types-PyYAML>=6.0.12"
       - run: MYPYPATH=src .ci-venv/bin/mypy --explicit-package-bases src
+
+  prettier:
+    name: Prettier (format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - run: bunx --yes prettier --check .

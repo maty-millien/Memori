@@ -70,8 +70,6 @@ def validate_benchmark(data: dict[str, Any]) -> list[str]:
             errors.append(f"{path}.id duplicates scenario id '{scenario_id}'.")
         scenario_ids.add(scenario_id)
 
-        _string_field(scenario, "title", path, errors)
-        _string_list_field(scenario, "focus", path, errors)
         scenario_type = _scenario_type(scenario, path, errors)
 
         if scenario_type == "retrieval_injection":
@@ -88,7 +86,6 @@ def validate_benchmark(data: dict[str, Any]) -> list[str]:
 
 def scenario_summary(data: dict[str, Any]) -> str:
     scenarios = data["scenarios"]
-    focus_counts: dict[str, int] = {}
     type_counts: dict[str, int] = {}
     lines = [
         f"{data.get('name', 'Benchmark')} ({data.get('version', 'unknown version')})",
@@ -97,24 +94,14 @@ def scenario_summary(data: dict[str, Any]) -> str:
     ]
 
     for scenario in scenarios:
-        focus = ", ".join(scenario["focus"])
         scenario_type = scenario["type"]
-        lines.append(
-            f"- {scenario['id']}: {scenario['title']} [{scenario_type}; {focus}]"
-        )
+        lines.append(f"- {scenario['id']} [{scenario_type}]")
         type_counts[scenario_type] = type_counts.get(scenario_type, 0) + 1
-        for item in scenario["focus"]:
-            focus_counts[item] = focus_counts.get(item, 0) + 1
 
     lines.append("")
     lines.append("Type coverage:")
     for scenario_type, count in sorted(type_counts.items()):
         lines.append(f"- {scenario_type}: {count}")
-
-    lines.append("")
-    lines.append("Focus coverage:")
-    for focus, count in sorted(focus_counts.items()):
-        lines.append(f"- {focus}: {count}")
 
     return "\n".join(lines)
 
@@ -149,13 +136,7 @@ def _validate_memory_tool_call(
     path: str,
     errors: list[str],
 ) -> None:
-    memory_ids = _validate_memories(scenario.get("initial_memories"), path, errors)
-    _validate_id_references(
-        scenario.get("injected_memory_ids", []),
-        memory_ids,
-        f"{path}.injected_memory_ids",
-        errors,
-    )
+    _validate_memories(scenario.get("initial_memories"), path, errors)
     _validate_turns(scenario, path, errors)
     expected = _validate_object(scenario.get("expected"), f"{path}.expected", errors)
     if expected is None:
@@ -220,8 +201,6 @@ def _validate_full_loop(
             continue
 
         _string_field(session, "id", session_path, errors)
-        if not isinstance(session.get("fresh_context"), bool):
-            errors.append(f"{session_path}.fresh_context must be a boolean.")
 
         if "initial_memories" in session:
             _validate_memories(session.get("initial_memories"), session_path, errors)
@@ -316,7 +295,6 @@ def _validate_memories(
         memory_ids.add(memory_id)
         _string_field(memory, "kind", item_path, errors)
         _string_field(memory, "content", item_path, errors)
-        _optional_confidence(memory, item_path, errors)
 
     return memory_ids
 
@@ -390,13 +368,11 @@ def _validate_memory_content_expectation(
         expectation.get("should_match"),
         f"{path}.should_match",
         errors,
-        require_label=True,
     )
     _validate_regex_expectations(
         expectation.get("should_not_match"),
         f"{path}.should_not_match",
         errors,
-        require_label=False,
     )
 
 
@@ -427,11 +403,11 @@ def _validate_tool_arguments(value: Any, path: str, errors: list[str]) -> None:
         errors.append(f"{path} must be an object.")
         return
 
-    for field in ("kind", "memory_id", "confidence"):
+    for field in ("kind", "memory_id"):
         if field in value and not isinstance(value[field], str):
             errors.append(f"{path}.{field} must be a string.")
 
-    for field in ("content_regex", "reason_regex", "memory_id_regex"):
+    for field in ("content_regex", "memory_id_regex"):
         if field in value:
             pattern = _string_field(value, field, path, errors)
             if pattern:
@@ -442,8 +418,6 @@ def _validate_regex_expectations(
     expectations: Any,
     path: str,
     errors: list[str],
-    *,
-    require_label: bool,
 ) -> None:
     if expectations is None:
         return
@@ -457,8 +431,6 @@ def _validate_regex_expectations(
             errors.append(f"{expectation_path} must be an object.")
             continue
 
-        if require_label:
-            _string_field(expectation, "label", expectation_path, errors)
         if "kind" in expectation and not isinstance(expectation["kind"], str):
             errors.append(f"{expectation_path}.kind must be a string.")
         pattern = _string_field(expectation, "regex", expectation_path, errors)
@@ -486,23 +458,6 @@ def _validate_count(value: Any, path: str, errors: list[str]) -> None:
         errors.append(f"{path}.min cannot exceed max.")
 
 
-def _validate_id_references(
-    value: Any,
-    known_ids: set[str],
-    path: str,
-    errors: list[str],
-) -> None:
-    if not isinstance(value, list):
-        errors.append(f"{path} must be a list.")
-        return
-
-    for memory_id in value:
-        if not isinstance(memory_id, str):
-            errors.append(f"{path} contains a non-string id.")
-        elif memory_id not in known_ids:
-            errors.append(f"{path} references unknown memory id '{memory_id}'.")
-
-
 def _scenario_type(data: dict[str, Any], path: str, errors: list[str]) -> str:
     value = _string_field(data, "type", path, errors)
     if value and value not in SCENARIO_TYPES:
@@ -516,12 +471,6 @@ def _validate_object(value: Any, path: str, errors: list[str]) -> dict[str, Any]
         errors.append(f"{path} must be an object.")
         return None
     return value
-
-
-def _optional_confidence(data: dict[str, Any], path: str, errors: list[str]) -> None:
-    confidence = data.get("confidence")
-    if confidence is not None and not isinstance(confidence, str):
-        errors.append(f"{path}.confidence must be a string.")
 
 
 def _validate_regex(pattern: str, path: str, errors: list[str]) -> None:

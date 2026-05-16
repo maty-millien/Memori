@@ -1,32 +1,22 @@
 id: 07_update_confirmed_deadline
-title: LLM upgrades uncertain memory when information is confirmed
 type: memory_tool_call
-focus:
-- memory_update
-- confidence
-- conflict_resolution
 initial_memories:
-- id: mem_deadline_uncertain
-  kind: fact
-  content: The final presentation might be on Friday, but the information is uncertain.
-  confidence: low
-injected_memory_ids:
-- mem_deadline_uncertain
+  - id: mem_deadline_uncertain
+    kind: fact
+    content: The final presentation might be on Friday, but the information is uncertain.
 turns:
-- role: user
-  content: It is confirmed now, the final presentation is on Wednesday.
+  - role: user
+    content: It is confirmed now, the final presentation is on Wednesday.
 expected:
   tool_calls:
-  - name: memory.update
-    arguments:
-      memory_id: mem_deadline_uncertain
-      content_regex: (?i)\bfinal presentation\b.*\bWednesday\b
-      confidence: high
+    - name: memory.update
+      arguments:
+        memory_id: mem_deadline_uncertain
+        content_regex: (?i)\bfinal presentation\b.*\bWednesday\b
   forbidden_tool_calls:
-  - name: memory.write
-    arguments:
-      content_regex: (?i)\bfinal presentation\b
+    - name: memory.write
+      arguments:
+        content_regex: (?i)\bfinal presentation\b
   final_memory_count:
     min: 1
     max: 1
-

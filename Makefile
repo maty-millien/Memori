@@ -33,3 +33,4 @@ tidy:
 	MYPYPATH=$(SOURCE_DIR) $(ENV_DIR)/bin/mypy --explicit-package-bases --cache-dir $(MYPY_CACHE_DIR) $(SOURCE_DIR)
 	$(ENV_DIR)/bin/ruff check --cache-dir $(RUFF_CACHE_DIR) --fix $(SOURCE_DIR)
 	$(ENV_DIR)/bin/ruff format --cache-dir $(RUFF_CACHE_DIR) $(SOURCE_DIR)
+	bunx --yes prettier --write .
