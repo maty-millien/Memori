@@ -10,8 +10,6 @@ import httpx
 from core.engine import Memory
 
 
-_MODEL = os.environ.get("MEMORI_LLM_MODEL", "deepseek/deepseek-v4-flash")
-_REASONING_EFFORT = os.environ.get("MEMORI_REASONING_EFFORT", "high")
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
@@ -150,6 +148,12 @@ def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY must be set to call the LLM")
+    model = os.environ.get("MEMORI_LLM_MODEL")
+    if not model:
+        raise RuntimeError("MEMORI_LLM_MODEL must be set to call the LLM")
+    reasoning_effort = os.environ.get("MEMORI_REASONING_EFFORT")
+    if not reasoning_effort:
+        raise RuntimeError("MEMORI_REASONING_EFFORT must be set to call the LLM")
 
     if retrieved:
         user_message = (
@@ -163,13 +167,13 @@ def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
         _OPENROUTER_URL,
         headers={"Authorization": f"Bearer {api_key}"},
         json={
-            "model": _MODEL,
+            "model": model,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
             ],
             "tools": _TOOLS,
-            "reasoning": {"effort": _REASONING_EFFORT},
+            "reasoning": {"effort": reasoning_effort},
         },
         timeout=180.0,
     )
@@ -213,13 +217,16 @@ def judge_trait(answer: str, trait: str) -> JudgeVerdict:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY must be set to call the judge")
+    model = os.environ.get("MEMORI_LLM_MODEL")
+    if not model:
+        raise RuntimeError("MEMORI_LLM_MODEL must be set to call the judge")
 
     user_message = f"ASSISTANT ANSWER:\n---\n{answer}\n---\n\nTRAIT TO VERIFY:\n{trait}"
     response = httpx.post(
         _OPENROUTER_URL,
         headers={"Authorization": f"Bearer {api_key}"},
         json={
-            "model": _MODEL,
+            "model": model,
             "messages": [
                 {"role": "system", "content": _JUDGE_PROMPT},
                 {"role": "user", "content": user_message},

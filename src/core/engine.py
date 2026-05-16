@@ -18,11 +18,7 @@ MemoryKind = Literal["preference", "project", "fact", "note"]
 Scope = Literal["global", "topical"]
 
 
-_EMBEDDING_MODEL = os.environ.get(
-    "MEMORI_EMBEDDING_MODEL", "perplexity/pplx-embed-v1-4b"
-)
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/embeddings"
-_MIN_SCORE = float(os.environ.get("MEMORI_RETRIEVAL_MIN_SCORE", "0.15"))
 
 
 @dataclass
@@ -44,10 +40,13 @@ def _embed(texts: list[str]) -> list[Embedding]:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY must be set to compute embeddings")
+    embedding_model = os.environ.get("MEMORI_EMBEDDING_MODEL")
+    if not embedding_model:
+        raise RuntimeError("MEMORI_EMBEDDING_MODEL must be set to compute embeddings")
     response = httpx.post(
         _OPENROUTER_URL,
         headers={"Authorization": f"Bearer {api_key}"},
-        json={"model": _EMBEDDING_MODEL, "input": texts},
+        json={"model": embedding_model, "input": texts},
         timeout=30.0,
     )
     response.raise_for_status()
@@ -83,6 +82,12 @@ class MemoryEngine:
         )
 
     def retrieve(self, query: str, top_k: int) -> list[Retrieved]:
+        min_score_raw = os.environ.get("MEMORI_RETRIEVAL_MIN_SCORE")
+        if not min_score_raw:
+            raise RuntimeError(
+                "MEMORI_RETRIEVAL_MIN_SCORE must be set to retrieve memories"
+            )
+        min_score = float(min_score_raw)
         total = self._collection.count()
         if total == 0 or top_k <= 0:
             return self._global_extras(set())
@@ -98,7 +103,7 @@ class MemoryEngine:
         kept_ids: set[str] = set()
         for mid, doc, dist, meta in zip(ids, documents, distances, metadatas):
             score = 1.0 - float(dist)
-            if score < _MIN_SCORE:
+            if score < min_score:
                 continue
             memory = Memory(
                 id=mid,
