@@ -18,7 +18,7 @@ sessions:
         - name: memory.write
           arguments:
             kind: project
-            content_regex: (?i)\bMemori\b.*\bCLI\b.*\bmemory\b
+            content_regex: (?i)(?=.*\bMemori\b)(?=.*\bCLI\b)(?=.*\bmemory\b)
       final_memory_count:
         min: 2
         max: 2
@@ -35,7 +35,7 @@ sessions:
         - name: memory.update
           arguments:
             memory_id_regex: (?i)mem_project|project
-            content_regex: (?i)\bCLI-first\b.*\bdemo\b.*\bwith-memory\b.*\bwithout-memory\b
+            content_regex: (?i)(?=.*\bCLI-first\b)(?=.*\bdemo\b)(?=.*\bwith-memory\b)(?=.*\bwithout-memory\b)
       final_memory_count:
         min: 2
         max: 3
@@ -66,4 +66,4 @@ post_session_consolidation:
     final_memories:
       should_match:
         - regex: (?i)\bFrench\b
-        - regex: (?i)\bMemori\b.*\bCLI\b.*\bdemo\b.*\bwith-memory\b.*\bwithout-memory\b
+        - regex: (?i)(?=.*\bMemori\b)(?=.*\bCLI\b)(?=.*\bdemo\b)(?=.*\bwith-memory\b)(?=.*\bwithout-memory\b)

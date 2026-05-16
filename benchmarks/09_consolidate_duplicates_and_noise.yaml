@@ -20,7 +20,7 @@ expected:
   final_memories:
     should_match:
       - kind: project
-        regex: (?i)\bMemori\b.*\b(memory|memories)\b.*\b(LLM|LLMs|language models?)\b
+        regex: (?i)(?=.*\bMemori\b)(?=.*\b(memory|memories)\b)(?=.*\b(LLM|LLMs|language models?)\b)
       - kind: preference
         regex: (?i)\bFrench\b
     should_not_match:

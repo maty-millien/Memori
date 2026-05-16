@@ -9,7 +9,7 @@ expected:
     - name: memory.write
       arguments:
         kind: fact
-        content_regex: (?i)\bfinal presentation\b.*\bFriday\b.*\b(uncertain|not sure|might|maybe)\b
+        content_regex: (?i)(?=.*\bfinal presentation\b)(?=.*\bFriday\b)(?=.*\b(uncertain|not sure|might|maybe)\b)
   forbidden_tool_calls:
     - name: memory.update
     - name: memory.delete

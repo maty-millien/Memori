@@ -1,4 +1,4 @@
-# Memori Memory Architecture
+# Memori Architecture
 
 ## Goal
 

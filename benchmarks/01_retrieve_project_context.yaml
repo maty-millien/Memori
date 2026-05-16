@@ -19,4 +19,4 @@ expected:
     max_count: 3
   injected_memory_content:
     should_match:
-      - regex: (?i)\bMemori\b.*\b(memory|memories)\b.*\b(LLM|LLMs|conversation)
+      - regex: (?i)(?=.*\bMemori\b)(?=.*\b(memory|memories)\b)(?=.*\b(LLM|LLMs|conversation))

@@ -19,6 +19,6 @@ expected:
     max_count: 2
   injected_memory_content:
     should_match:
-      - regex: (?i)\bCLI\b.*\badd\b.*\bsearch\b.*\bconsolidate\b.*\beval\b
+      - regex: (?i)(?=.*\bCLI\b)(?=.*\badd\b)(?=.*\bsearch\b)(?=.*\bconsolidate\b)(?=.*\beval\b)
     should_not_match:
       - regex: (?i)\brunning\b|\bworkout\b

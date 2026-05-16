@@ -1,3 +1,7 @@
+# ---------- Memori ----------
+runs/
+.env
+
 # ---------- macOS ----------
 .DS_Store
 .AppleDouble

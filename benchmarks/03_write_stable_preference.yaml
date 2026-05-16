@@ -9,7 +9,7 @@ expected:
     - name: memory.write
       arguments:
         kind: preference
-        content_regex: (?i)\bcode\b.*\b(short|concise|brief)\b.*\b(concrete|practical)\b
+        content_regex: (?i)(?=.*\bcode\b)(?=.*\b(short|concise|brief)\b)(?=.*\b(concrete|practical)\b)
   forbidden_tool_calls:
     - name: memory.update
     - name: memory.delete

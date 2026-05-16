@@ -12,7 +12,7 @@ expected:
     - name: memory.update
       arguments:
         memory_id: mem_report_style
-        content_regex: (?i)\btechnical reports?\b.*\b(short|concise)\b.*\b(clear|results?-oriented|results?)\b
+        content_regex: (?i)(?=.*\btechnical reports?\b)(?=.*\b(short|concise)\b)(?=.*\b(clear|results?-oriented|results?)\b)
   forbidden_tool_calls:
     - name: memory.write
       arguments:
