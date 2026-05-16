@@ -1,0 +1,39 @@
+id: 09_consolidate_duplicates_and_noise
+title: Consolidation merges duplicates and removes noise
+type: session_consolidation
+focus:
+- consolidation
+- deduplication
+- noise_rejection
+pre_consolidation_memories:
+- id: mem_1
+  kind: project
+  content: Memori is an external memory layer for LLMs.
+  confidence: high
+- id: mem_2
+  kind: project
+  content: Memori gives language models durable memory.
+  confidence: high
+- id: mem_3
+  kind: note
+  content: User opened a terminal.
+  confidence: medium
+- id: mem_4
+  kind: preference
+  content: User prefers answers in French.
+  confidence: high
+expected:
+  final_memory_count:
+    min: 2
+    max: 2
+  final_memories:
+    should_match:
+    - label: consolidated_memori_goal
+      kind: project
+      regex: (?i)\bMemori\b.*\b(memory|memories)\b.*\b(LLM|LLMs|language models?)\b
+    - label: language_preference
+      kind: preference
+      regex: (?i)\bFrench\b
+    should_not_match:
+    - regex: (?i)\bterminal\b
+

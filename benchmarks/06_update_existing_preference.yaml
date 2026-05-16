@@ -1,0 +1,32 @@
+id: 06_update_existing_preference
+title: LLM updates an injected preference instead of duplicating it
+type: memory_tool_call
+focus:
+- memory_update
+- deduplication
+- contradiction_resolution
+initial_memories:
+- id: mem_report_style
+  kind: preference
+  content: User prefers very detailed technical reports with many explanations.
+  confidence: high
+injected_memory_ids:
+- mem_report_style
+turns:
+- role: user
+  content: Actually, for technical reports, I now want something short, clear, and results-oriented.
+expected:
+  tool_calls:
+  - name: memory.update
+    arguments:
+      memory_id: mem_report_style
+      content_regex: (?i)\btechnical reports?\b.*\b(short|concise)\b.*\b(clear|results?-oriented|results?)\b
+      confidence: high
+  forbidden_tool_calls:
+  - name: memory.write
+    arguments:
+      content_regex: (?i)\btechnical reports?\b
+  final_memory_count:
+    min: 1
+    max: 1
+

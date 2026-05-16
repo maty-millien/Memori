@@ -1,0 +1,26 @@
+id: 05_write_uncertain_fact
+title: LLM writes uncertain information with low confidence
+type: memory_tool_call
+focus:
+- memory_write
+- uncertainty
+- confidence
+initial_memories: []
+injected_memory_ids: []
+turns:
+- role: user
+  content: I think the final presentation is on Friday, but I am not sure yet.
+expected:
+  tool_calls:
+  - name: memory.write
+    arguments:
+      kind: fact
+      content_regex: (?i)\bfinal presentation\b.*\bFriday\b.*\b(uncertain|not sure|might|maybe)\b
+      confidence: low
+  forbidden_tool_calls:
+  - name: memory.update
+  - name: memory.delete
+  final_memory_count:
+    min: 1
+    max: 1
+

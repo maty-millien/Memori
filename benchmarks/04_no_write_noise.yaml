@@ -1,0 +1,22 @@
+id: 04_no_write_noise
+title: LLM does not write casual micro-details
+type: memory_tool_call
+focus:
+- noise_rejection
+- no_write_decision
+- memory_write
+initial_memories: []
+injected_memory_ids: []
+turns:
+- role: user
+  content: I just opened my terminal, I am drinking coffee, and I put on a playlist.
+expected:
+  tool_calls: []
+  forbidden_tool_calls:
+  - name: memory.write
+    arguments:
+      content_regex: (?i)\bterminal\b|\bcoffee\b|\bplaylist\b
+  final_memory_count:
+    min: 0
+    max: 0
+

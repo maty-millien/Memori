@@ -1,0 +1,35 @@
+id: 01_retrieve_project_context
+title: Automatic retrieval injects project context
+type: retrieval_injection
+focus:
+- retrieval
+- context_injection
+- topical_relevance
+initial_memories:
+- id: mem_project
+  kind: project
+  content: User is building Memori, a durable memory layer for LLM conversations.
+  confidence: high
+- id: mem_running
+  kind: preference
+  content: User prefers running in the morning rather than in the evening.
+  confidence: high
+- id: mem_report_style
+  kind: preference
+  content: User prefers short, results-oriented technical reports.
+  confidence: medium
+turns:
+- role: user
+  content: Can you help me think through the architecture for the memory system?
+expected:
+  injected_memory_ids:
+    include:
+    - mem_project
+    exclude:
+    - mem_running
+    max_count: 3
+  injected_memory_content:
+    should_match:
+    - label: project_context
+      regex: (?i)\bMemori\b.*\b(memory|memories)\b.*\b(LLM|LLMs|conversation)
+

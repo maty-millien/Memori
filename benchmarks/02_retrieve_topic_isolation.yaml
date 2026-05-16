@@ -1,0 +1,37 @@
+id: 02_retrieve_topic_isolation
+title: Automatic retrieval keeps unrelated topics out
+type: retrieval_injection
+focus:
+- retrieval_precision
+- topic_isolation
+- context_injection
+initial_memories:
+- id: mem_cli
+  kind: project
+  content: Memori should provide a Python CLI with add, search, consolidate, and eval commands.
+  confidence: high
+- id: mem_workout
+  kind: preference
+  content: User prefers running workouts in the morning.
+  confidence: high
+- id: mem_language
+  kind: preference
+  content: User prefers answers in French.
+  confidence: high
+turns:
+- role: user
+  content: Which commands should the CLI expose for the memory prototype?
+expected:
+  injected_memory_ids:
+    include:
+    - mem_cli
+    exclude:
+    - mem_workout
+    max_count: 2
+  injected_memory_content:
+    should_match:
+    - label: cli_commands
+      regex: (?i)\bCLI\b.*\badd\b.*\bsearch\b.*\bconsolidate\b.*\beval\b
+    should_not_match:
+    - regex: (?i)\brunning\b|\bworkout\b
+

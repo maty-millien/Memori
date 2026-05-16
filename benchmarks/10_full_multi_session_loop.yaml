@@ -1,0 +1,84 @@
+id: 10_full_multi_session_loop
+title: Full loop across fresh-context chats
+type: full_loop
+focus:
+- fresh_context
+- retrieval
+- memory_write
+- memory_update
+- consolidation
+sessions:
+- id: chat_1_seed
+  fresh_context: true
+  initial_memories: []
+  expected_injected_memory_ids:
+    include: []
+    max_count: 0
+  turns:
+  - role: user
+    content: For this project, answer in French. Also, Memori should be a CLI-first memory prototype.
+  expected:
+    tool_calls:
+    - name: memory.write
+      arguments:
+        kind: preference
+        content_regex: (?i)\bFrench\b
+    - name: memory.write
+      arguments:
+        kind: project
+        content_regex: (?i)\bMemori\b.*\bCLI\b.*\bmemory\b
+    final_memory_count:
+      min: 2
+      max: 2
+- id: chat_2_update
+  fresh_context: true
+  expected_injected_memory_ids:
+    include:
+    - mem_project_cli
+    max_count: 3
+  turns:
+  - role: user
+    content: Actually, Memori should still be CLI-first, but the key demo is comparing with-memory and without-memory answers.
+  expected:
+    tool_calls:
+    - name: memory.update
+      arguments:
+        memory_id_regex: (?i)mem_project|project
+        content_regex: (?i)\bCLI-first\b.*\bdemo\b.*\bwith-memory\b.*\bwithout-memory\b
+    final_memory_count:
+      min: 2
+      max: 3
+- id: chat_3_retrieve
+  fresh_context: true
+  expected_injected_memory_ids:
+    include:
+    - mem_project_cli
+    - mem_language
+    exclude:
+    - mem_noise
+    max_count: 3
+  turns:
+  - role: user
+    content: What should I show in the demo?
+  expected:
+    answer_traits:
+    - The answer is in French.
+    - The answer mentions comparing with-memory and without-memory behavior.
+    forbidden_tool_calls:
+    - name: memory.write
+      arguments:
+        content_regex: (?i)\bdemo\b
+post_session_consolidation:
+  expected:
+    final_memory_count:
+      min: 2
+      max: 3
+    final_memories:
+      should_match:
+      - label: language_preference
+        regex: (?i)\bFrench\b
+      - label: project_demo_goal
+        regex: (?i)\bMemori\b.*\bCLI\b.*\bdemo\b.*\bwith-memory\b.*\bwithout-memory\b
+      should_not_match:
+      - regex: (?i)\bActually\b
+
