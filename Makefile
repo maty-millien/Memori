@@ -9,7 +9,7 @@ RUFF_CACHE_DIR = $(ENV_DIR)/cache/ruff
 PYTHON_BIN = $(ENV_DIR)/bin/python
 PYTHON = PYTHONPYCACHEPREFIX=$(PYCACHE_DIR) $(PYTHON_BIN)
 
-# Environment rules ———————————————————————————————————————————————————————————
+# Environment —————————————————————————————————————————————————————————————————
 
 env:
 	uv venv $(ENV_DIR) --python $(PYTHON_VERSION)
@@ -21,7 +21,7 @@ sync:
 clean:
 	rm -rf $(ENV_DIR)
 
-# Project rules ———————————————————————————————————————————————————————————————
+# Project —————————————————————————————————————————————————————————————————————
 
 run:
 	$(PYTHON) src/main.py
