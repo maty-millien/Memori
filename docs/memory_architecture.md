@@ -154,6 +154,7 @@ The consolidator should:
 This makes the architecture easier to build incrementally:
 
 ```text
+V0: benchmark scenarios + scenario loader (current)
 V1: automatic retrieval + memory write tool
 V2: add update/delete tools
 V3: add session-end consolidation
@@ -191,12 +192,14 @@ The LLM does not call a search tool in these tests.
 type: retrieval_injection
 initial_memories:
   - id: mem_project
+    kind: project
     content: User is building Memori, a durable memory layer for LLM conversations.
   - id: mem_running
-    content: User prefers running in the morning.
+    kind: preference
+    content: User prefers running in the morning rather than in the evening.
 turns:
   - role: user
-    content: Can you help me think through the memory architecture?
+    content: Can you help me think through the architecture for the memory system?
 expected:
   injected_memory_ids:
     include:
@@ -204,7 +207,12 @@ expected:
     exclude:
       - mem_running
     max_count: 3
+  injected_memory_content:
+    should_match:
+      - regex: (?i)\bMemori\b.*\b(memory|memories)\b.*\b(LLM|LLMs|conversation)
 ```
+
+Each memory carries a `kind` label (`preference`, `project`, `fact`, `note`) so retrieval and consolidation can reason about category, not just embedding similarity.
 
 ### Memory Tool Calls
 
@@ -221,7 +229,7 @@ Example:
 
 ```yaml
 type: memory_tool_call
-injected_memory_ids: []
+initial_memories: []
 turns:
   - role: user
     content: For code explanations, I prefer short but concrete answers.
@@ -230,22 +238,49 @@ expected:
     - name: memory.write
       arguments:
         kind: preference
-        content_regex: (?i)\bcode\b.*\bshort\b.*\bconcrete\b
-        confidence: high
+        content_regex: (?i)\bcode\b.*\b(short|concise|brief)\b.*\b(concrete|practical)\b
+  forbidden_tool_calls:
+    - name: memory.update
+    - name: memory.delete
   final_memory_count:
     min: 1
     max: 1
 ```
 
+Updates target an existing memory by id (or a regex over ids in multi-session scenarios):
+
+```yaml
+initial_memories:
+  - id: mem_report_style
+    kind: preference
+    content: User prefers very detailed technical reports with many explanations.
+turns:
+  - role: user
+    content: Actually, for technical reports, I now want something short, clear, and results-oriented.
+expected:
+  tool_calls:
+    - name: memory.update
+      arguments:
+        memory_id: mem_report_style
+        content_regex: (?i)\btechnical reports?\b.*\b(short|concise)\b.*\b(clear|results?-oriented|results?)\b
+  forbidden_tool_calls:
+    - name: memory.write
+      arguments:
+        content_regex: (?i)\btechnical reports?\b
+```
+
 Noise should produce no write:
 
 ```yaml
+turns:
+  - role: user
+    content: I just opened my terminal, I am drinking coffee, and I put on a playlist.
 expected:
   tool_calls: []
   forbidden_tool_calls:
     - name: memory.write
       arguments:
-        content_regex: (?i)\bcoffee\b|\bplaylist\b
+        content_regex: (?i)\bterminal\b|\bcoffee\b|\bplaylist\b
   final_memory_count:
     min: 0
     max: 0
@@ -259,32 +294,83 @@ Consolidation scenarios test the post-session cleanup step without running a cha
 type: session_consolidation
 pre_consolidation_memories:
   - id: mem_1
+    kind: project
     content: Memori is an external memory layer for LLMs.
   - id: mem_2
+    kind: project
     content: Memori gives language models durable memory.
   - id: mem_3
+    kind: note
     content: User opened a terminal.
+  - id: mem_4
+    kind: preference
+    content: User prefers answers in French.
 expected:
   final_memory_count:
-    min: 1
-    max: 1
+    min: 2
+    max: 2
   final_memories:
     should_match:
-      - label: consolidated_project_memory
-        regex: (?i)\bMemori\b.*\bmemory\b.*\bLLM
+      - kind: project
+        regex: (?i)\bMemori\b.*\b(memory|memories)\b.*\b(LLM|LLMs|language models?)\b
+      - kind: preference
+        regex: (?i)\bFrench\b
     should_not_match:
       - regex: (?i)\bterminal\b
 ```
 
 ### Full Loop
 
-Full-loop scenarios test several fresh-context chats together:
+Full-loop scenarios chain several fresh-context chats and a final consolidation step in a single file:
 
 ```text
 chat 1 -> automatic retrieval -> LLM memory tool calls
 chat 2 with fresh context -> automatic retrieval -> LLM updates memory
 chat 3 with fresh context -> automatic retrieval -> answer
 session end -> consolidation
+```
+
+```yaml
+type: full_loop
+sessions:
+  - id: chat_1_seed
+    initial_memories: []
+    expected_injected_memory_ids:
+      include: []
+      max_count: 0
+    turns:
+      - role: user
+        content: For this project, answer in French. Also, Memori should be a CLI-first memory prototype.
+    expected:
+      tool_calls:
+        - name: memory.write
+          arguments:
+            kind: preference
+            content_regex: (?i)\bFrench\b
+        - name: memory.write
+          arguments:
+            kind: project
+            content_regex: (?i)\bMemori\b.*\bCLI\b.*\bmemory\b
+      final_memory_count: { min: 2, max: 2 }
+  - id: chat_3_retrieve
+    expected_injected_memory_ids:
+      include: [mem_project_cli, mem_language]
+      exclude: [mem_noise]
+      max_count: 3
+    turns:
+      - role: user
+        content: What should I show in the demo?
+    expected:
+      answer_traits:
+        - The answer is in French.
+        - The answer mentions comparing with-memory and without-memory behavior.
+post_session_consolidation:
+  expected:
+    final_memory_count: { min: 2, max: 3 }
+    final_memories:
+      should_match:
+        - regex: (?i)\bFrench\b
+        - regex: (?i)\bMemori\b.*\bCLI\b.*\bdemo\b
 ```
 
 These scenarios are useful for the final demo, but they should not replace focused component tests.
@@ -301,6 +387,17 @@ Instead, scenarios should check:
 - whether consolidation removed duplicates or obsolete facts
 
 This catches the important failure mode: if a scenario contains only two durable facts but the system creates ten memories, the benchmark should fail even if some of those memories are technically true.
+
+## Implementation Status
+
+The repository currently contains the benchmark spec, not the runtime:
+
+- `benchmarks/` — ten scenario YAML files covering retrieval injection (×2), memory tool calls for write/update/delete and noise rejection (×6), session consolidation (×1), and a multi-session full loop (×1).
+- `src/benchmark/` — a loader (`loader.py`) that parses every YAML file in `benchmarks/` into a list of dicts, and a `main` entry point (`make benchmark`) that prints the scenario count. There is no execution or grading logic; the recent refactor explicitly removed it so the harness can be rebuilt around the agreed scenario format.
+- `src/cli/` — placeholder only; the user-facing CLI is not implemented.
+- `src/core/` — empty. No retriever, no memory store, no tool implementations yet.
+
+The memory record schema in [Storage](#storage) (with `embedding`, `confidence`, `status`, etc.) is the target shape. Scenarios today only carry `id`, `kind`, and `content` — confidence and source metadata are deferred until the storage layer lands.
 
 ## Design Principle
 
