@@ -26,8 +26,7 @@ cli: tidy
 	$(PYTHON) -m cli.main
 
 benchmark: tidy
-	$(PYTHON) -m benchmark.main validate
-	$(PYTHON) -m benchmark.main summary
+	$(PYTHON) -m benchmark.main
 
 tidy:
 	MYPYPATH=$(SOURCE_DIR) $(ENV_DIR)/bin/mypy --explicit-package-bases --cache-dir $(MYPY_CACHE_DIR) $(SOURCE_DIR)
