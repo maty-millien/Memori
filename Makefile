@@ -3,7 +3,7 @@
 PYTHON_VERSION = 3.10
 ENV_DIR = .venv
 SOURCE_DIR = src
-PYCACHE_DIR = $(ENV_DIR)/pycache
+PYCACHE_DIR = $(ENV_DIR)/cache/python
 MYPY_CACHE_DIR = $(ENV_DIR)/cache/mypy
 RUFF_CACHE_DIR = $(ENV_DIR)/cache/ruff
 PYTHON_BIN = $(ENV_DIR)/bin/python
