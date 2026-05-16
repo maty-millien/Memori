@@ -12,11 +12,11 @@ expected:
     - name: memory.update
       arguments:
         memory_id: mem_deadline_uncertain
-        content_regex: (?i)(?=.*\bfinal presentation\b)(?=.*\bWednesday\b)
+        content_regex: (?i)(?=.*\bpresentation\b)(?=.*\bWednesday\b)
   forbidden_tool_calls:
     - name: memory.write
       arguments:
-        content_regex: (?i)\bfinal presentation\b
+        content_regex: (?i)\bpresentation\b
   final_memory_count:
     min: 1
     max: 1

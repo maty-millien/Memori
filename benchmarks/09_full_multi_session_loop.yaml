@@ -7,57 +7,61 @@ sessions:
       should_match: []
     turns:
       - role: user
-        content: For this project, answer in French. Also, Memori should be a CLI-first memory prototype.
+        content: I am planning a trip to Tokyo in June. For accommodation, I prefer budget hostels over hotels.
     expected:
       tool_calls:
         - name: memory.write
           arguments:
-            kind: preference
-            content_regex: (?i)\bFrench\b
+            kind: fact
+            content_regex: (?i)(?=.*\bTokyo\b)(?=.*\bJune\b)
         - name: memory.write
           arguments:
-            kind: project
-            content_regex: (?i)(?=.*\bMemori\b)(?=.*\bCLI\b)(?=.*\bmemory\b)
+            kind: preference
+            content_regex: (?i)(?=.*\b(hostel|budget)\b)
       final_memory_count:
         min: 2
         max: 2
   - id: chat_2_update
     expected_injected_content:
       should_match:
-        - regex: (?i)(?=.*\bMemori\b)(?=.*\bCLI\b)
+        - regex: (?i)(?=.*\bTokyo\b)(?=.*\bJune\b)
     turns:
       - role: user
-        content: Actually, Memori should still be CLI-first, but the key demo is comparing with-memory and without-memory answers.
+        content: Actually, I had to push the Tokyo trip back to October.
     expected:
       tool_calls:
         - name: memory.update
           arguments:
-            content_regex: (?i)(?=.*\bCLI-first\b)(?=.*\bdemo\b)(?=.*\bwith-memory\b)(?=.*\bwithout-memory\b)
-      final_memory_count:
-        min: 2
-        max: 3
-  - id: chat_3_retrieve
-    expected_injected_content:
-      should_match:
-        - regex: (?i)\bFrench\b
-        - regex: (?i)(?=.*\bCLI-first\b)(?=.*\bdemo\b)
-    turns:
-      - role: user
-        content: What should I show in the demo?
-    expected:
-      answer_traits:
-        - The answer is written in French.
-        - The answer mentions comparing with-memory and without-memory behaviour.
+            content_regex: (?i)(?=.*\bTokyo\b)(?=.*\bOctober\b)
       forbidden_tool_calls:
         - name: memory.write
           arguments:
-            content_regex: (?i)\bdemo\b
+            content_regex: (?i)\bTokyo\b
+      final_memory_count:
+        min: 2
+        max: 2
+  - id: chat_3_retrieve
+    expected_injected_content:
+      should_match:
+        - regex: (?i)(?=.*\bTokyo\b)(?=.*\bOctober\b)
+        - regex: (?i)\b(hostel|budget)\b
+    turns:
+      - role: user
+        content: What should I think about preparing for my trip?
+    expected:
+      answer_traits:
+        - The answer references the Tokyo trip in October.
+        - The answer takes the budget hostel accommodation preference into account.
+      forbidden_tool_calls:
+        - name: memory.write
+          arguments:
+            content_regex: (?i)\bTokyo\b
 final_state:
   expected:
     final_memory_count:
       min: 2
-      max: 3
+      max: 2
     final_memories:
       should_match:
-        - regex: (?i)\bFrench\b
-        - regex: (?i)(?=.*\bMemori\b)(?=.*\bCLI\b)(?=.*\bdemo\b)(?=.*\bwith-memory\b)(?=.*\bwithout-memory\b)
+        - regex: (?i)(?=.*\bTokyo\b)(?=.*\bOctober\b)
+        - regex: (?i)\b(hostel|budget)\b

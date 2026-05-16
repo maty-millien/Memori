@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -38,9 +39,17 @@ def main() -> None:
         log(f"Scenarios: {len(scenarios)}")
         log("")
 
-        results: list[ScenarioResult] = [
-            grade(sc, MemoryEngine(), log) for sc in scenarios
-        ]
+        def _run(sc: dict) -> tuple[ScenarioResult, list[str]]:
+            buf: list[str] = []
+            return grade(sc, MemoryEngine(), buf.append), buf
+
+        MemoryEngine()  # warm chromadb client before fanning out
+        with ThreadPoolExecutor() as ex:
+            pairs = list(ex.map(_run, scenarios))
+        for _, buf in pairs:
+            for line in buf:
+                log(line)
+        results: list[ScenarioResult] = [r for r, _ in pairs]
 
         passed, failed, skipped = _summarize(results)
         log("=" * 78)

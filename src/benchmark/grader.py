@@ -207,13 +207,6 @@ def grade_memory_tool_call(
     for line in result.user_message.splitlines():
         log(f"  | {line}")
 
-    assistant_content = result.assistant_message.get("content")
-    if assistant_content:
-        log("")
-        log("LLM assistant content:")
-        for line in str(assistant_content).splitlines():
-            log(f"  | {line}")
-
     reasoning = result.assistant_message.get("reasoning")
     if reasoning:
         log("")
@@ -227,6 +220,13 @@ def grade_memory_tool_call(
         log("  (no tool calls)")
     for call in result.tool_calls:
         log(f"  - {call.name}({json.dumps(call.arguments, ensure_ascii=False)})")
+
+    assistant_content = result.assistant_message.get("content")
+    if assistant_content:
+        log("")
+        log("LLM assistant content:")
+        for line in str(assistant_content).splitlines():
+            log(f"  | {line}")
 
     for call in result.tool_calls:
         _apply_tool_call(call, engine)
@@ -368,13 +368,6 @@ def grade_full_loop(
         for line in result.user_message.splitlines():
             log(f"  | {line}")
 
-        assistant_content = result.assistant_message.get("content")
-        if assistant_content:
-            log("")
-            log("LLM assistant content:")
-            for line in str(assistant_content).splitlines():
-                log(f"  | {line}")
-
         reasoning = result.assistant_message.get("reasoning")
         if reasoning:
             log("")
@@ -388,6 +381,13 @@ def grade_full_loop(
             log("  (no tool calls)")
         for call in result.tool_calls:
             log(f"  - {call.name}({json.dumps(call.arguments, ensure_ascii=False)})")
+
+        assistant_content = result.assistant_message.get("content")
+        if assistant_content:
+            log("")
+            log("LLM assistant content:")
+            for line in str(assistant_content).splitlines():
+                log(f"  | {line}")
 
         for call in result.tool_calls:
             _apply_tool_call(call, engine)

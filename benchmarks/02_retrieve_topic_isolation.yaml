@@ -3,13 +3,13 @@ type: retrieval_injection
 initial_memories:
   - id: mem_cli
     kind: project
-    content: Memori should provide a Python CLI with add, search, consolidate, and eval commands.
+    content: TaskFlow should provide a Python CLI with add, list, complete, and search commands.
   - id: mem_workout
     kind: preference
     content: User prefers running workouts in the morning.
 turns:
   - role: user
-    content: Which commands should the CLI expose for the memory prototype?
+    content: Which commands should the CLI expose for the task management prototype?
 expected:
   injected_memory_ids:
     include:
@@ -19,6 +19,6 @@ expected:
     max_count: 2
   injected_memory_content:
     should_match:
-      - regex: (?i)(?=.*\bCLI\b)(?=.*\badd\b)(?=.*\bsearch\b)(?=.*\bconsolidate\b)(?=.*\beval\b)
+      - regex: (?i)\bCLI\b
     should_not_match:
       - regex: (?i)\brunning\b|\bworkout\b

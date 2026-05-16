@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import count
@@ -57,7 +58,7 @@ class MemoryEngine:
     def __init__(self) -> None:
         self._client = chromadb.Client()
         self._collection = self._client.get_or_create_collection(
-            name="memori",
+            name=f"memori_{uuid.uuid4().hex}",
             metadata={"hnsw:space": "cosine"},
         )
         self._auto_id = count(1)
