@@ -4,6 +4,8 @@ PYTHON_VERSION = 3.10
 ENV_DIR = .venv
 SOURCE_DIR = src
 PYCACHE_DIR = $(ENV_DIR)/pycache
+MYPY_CACHE_DIR = $(ENV_DIR)/cache/mypy
+RUFF_CACHE_DIR = $(ENV_DIR)/cache/ruff
 PYTHON_BIN = $(ENV_DIR)/bin/python
 PYTHON = PYTHONPYCACHEPREFIX=$(PYCACHE_DIR) $(PYTHON_BIN)
 
@@ -25,6 +27,6 @@ run:
 	$(PYTHON) src/main.py
 
 tidy:
-	$(ENV_DIR)/bin/mypy $(SOURCE_DIR)
-	$(ENV_DIR)/bin/ruff check --fix $(SOURCE_DIR)
-	$(ENV_DIR)/bin/ruff format $(SOURCE_DIR)
+	$(ENV_DIR)/bin/mypy --cache-dir $(MYPY_CACHE_DIR) $(SOURCE_DIR)
+	$(ENV_DIR)/bin/ruff check --cache-dir $(RUFF_CACHE_DIR) --fix $(SOURCE_DIR)
+	$(ENV_DIR)/bin/ruff format --cache-dir $(RUFF_CACHE_DIR) $(SOURCE_DIR)
