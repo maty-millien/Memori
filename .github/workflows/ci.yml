@@ -26,8 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: python3 -m venv .ci-venv
-      - run: .ci-venv/bin/python -m pip install "mypy>=1.11.0" "types-PyYAML>=6.0.12"
+      - uses: astral-sh/setup-uv@v3
+      - run: uv venv .ci-venv --python 3.10
+      - run: uv pip install --python .ci-venv/bin/python --group app --group dev
       - run: MYPYPATH=src .ci-venv/bin/mypy --explicit-package-bases src
 
   prettier:
