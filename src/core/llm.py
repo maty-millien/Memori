@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -128,15 +129,13 @@ def _wrap(tag: str, body: str) -> str:
 _MAX_ATTEMPTS = 3
 
 
-def call_with_tools(
+def _build_request(
     user_content: str,
     retrieved: list[Memory],
-    recent_conversations: list[Memory] | None = None,
-    similar_conversations: list[Memory] | None = None,
-) -> LLMResult:
-    model = require("MEMORI_LLM_MODEL")
-    reasoning_effort = require("MEMORI_REASONING_EFFORT")
-
+    recent_conversations: list[Memory] | None,
+    similar_conversations: list[Memory] | None,
+    history: list[dict[str, Any]] | None,
+) -> tuple[dict[str, Any], str]:
     blocks: list[str] = []
     if recent_conversations:
         blocks.append(
@@ -151,15 +150,39 @@ def call_with_tools(
     user_message = "\n\n".join([*blocks, user_content]) if blocks else user_content
 
     request_body: dict[str, Any] = {
-        "model": model,
+        "model": require("MEMORI_LLM_MODEL"),
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
+            *(history or []),
             {"role": "user", "content": user_message},
         ],
         "tools": _TOOLS,
-        "reasoning": {"effort": reasoning_effort},
+        "reasoning": {"effort": require("MEMORI_REASONING_EFFORT")},
     }
+    return request_body, user_message
 
+
+def _parse_tool_call(raw_name: str, args_field: Any) -> ToolCall:
+    mapped = _TOOL_NAME_MAP.get(raw_name, raw_name)
+    try:
+        arguments = (
+            json.loads(args_field) if isinstance(args_field, str) else args_field
+        )
+    except json.JSONDecodeError:
+        arguments = {}
+    return ToolCall(name=mapped, arguments=cast(dict[str, Any], arguments or {}))
+
+
+def call_with_tools(
+    user_content: str,
+    retrieved: list[Memory],
+    recent_conversations: list[Memory] | None = None,
+    similar_conversations: list[Memory] | None = None,
+    history: list[dict[str, Any]] | None = None,
+) -> LLMResult:
+    request_body, user_message = _build_request(
+        user_content, retrieved, recent_conversations, similar_conversations, history
+    )
     client = OpenRouterClient()
     calls: list[ToolCall] = []
     assistant_message: dict[str, Any] = {}
@@ -171,19 +194,8 @@ def call_with_tools(
             assistant_message = choice.get("message", {}) or {}
             for raw in assistant_message.get("tool_calls") or []:
                 fn = raw.get("function", {})
-                raw_name = fn.get("name", "")
-                mapped = _TOOL_NAME_MAP.get(raw_name, raw_name)
-                args_field = fn.get("arguments", "{}")
-                try:
-                    arguments = (
-                        json.loads(args_field)
-                        if isinstance(args_field, str)
-                        else args_field
-                    )
-                except json.JSONDecodeError:
-                    arguments = {}
                 calls.append(
-                    ToolCall(name=mapped, arguments=cast(dict[str, Any], arguments))
+                    _parse_tool_call(fn.get("name", ""), fn.get("arguments", "{}"))
                 )
         if (
             calls
@@ -192,6 +204,62 @@ def call_with_tools(
         ):
             break
 
+    return LLMResult(
+        tool_calls=calls,
+        user_message=user_message,
+        assistant_message=assistant_message,
+    )
+
+
+def _noop(_: str) -> None:
+    return None
+
+
+def stream_with_tools(
+    user_content: str,
+    retrieved: list[Memory],
+    recent_conversations: list[Memory] | None = None,
+    similar_conversations: list[Memory] | None = None,
+    history: list[dict[str, Any]] | None = None,
+    on_reasoning: Callable[[str], None] = _noop,
+    on_content: Callable[[str], None] = _noop,
+    on_tool: Callable[[str], None] = _noop,
+) -> LLMResult:
+    request_body, user_message = _build_request(
+        user_content, retrieved, recent_conversations, similar_conversations, history
+    )
+    reasoning_buf, content_buf = "", ""
+    slots: dict[int, dict[str, str]] = {}
+    announced: set[int] = set()
+
+    for chunk in OpenRouterClient().chat_completions_stream(request_body):
+        for choice in chunk.get("choices", []):
+            delta = choice.get("delta") or {}
+            if r := delta.get("reasoning"):
+                reasoning_buf += r
+                on_reasoning(r)
+            if c := delta.get("content"):
+                content_buf += c
+                on_content(c)
+            for td in delta.get("tool_calls") or []:
+                idx = td.get("index", 0)
+                slot = slots.setdefault(idx, {"name": "", "arguments": ""})
+                fn = td.get("function") or {}
+                if n := fn.get("name"):
+                    slot["name"] += n
+                if a := fn.get("arguments"):
+                    slot["arguments"] += a
+                if idx not in announced and slot["name"] in _TOOL_NAME_MAP:
+                    announced.add(idx)
+                    on_tool(_TOOL_NAME_MAP[slot["name"]])
+
+    calls = [
+        _parse_tool_call(slots[i]["name"], slots[i]["arguments"]) for i in sorted(slots)
+    ]
+    assistant_message: dict[str, Any] = {
+        "content": content_buf,
+        "reasoning": reasoning_buf,
+    }
     return LLMResult(
         tool_calls=calls,
         user_message=user_message,

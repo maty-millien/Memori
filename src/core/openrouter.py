@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -35,3 +37,25 @@ class OpenRouterClient:
         self, payload: dict[str, Any], timeout: float = 180.0
     ) -> dict[str, Any]:
         return self._post("/chat/completions", payload, timeout)
+
+    def chat_completions_stream(
+        self, payload: dict[str, Any], timeout: float = 180.0
+    ) -> Iterator[dict[str, Any]]:
+        with httpx.stream(
+            "POST",
+            f"{_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {self._api_key}"},
+            json={**payload, "stream": True},
+            timeout=timeout,
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = line[6:]
+                if data == "[DONE]":
+                    return
+                try:
+                    yield json.loads(data)
+                except json.JSONDecodeError:
+                    continue
