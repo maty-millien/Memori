@@ -7,7 +7,7 @@ turns:
 expected:
   tool_calls: []
   forbidden_tool_calls:
-    - name: memory.write
+    - name: memory.upsert
       arguments:
         content_regex: (?i)\bterminal\b|\bcoffee\b|\bplaylist\b
   final_memory_count:

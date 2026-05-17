@@ -12,7 +12,7 @@ expected:
       arguments:
         memory_id: mem_workout
   forbidden_tool_calls:
-    - name: memory.write
+    - name: memory.upsert
       arguments:
         content_regex: (?i)\bmorning runs?\b|\brunning in the morning\b
   final_memory_count:

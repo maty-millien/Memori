@@ -26,10 +26,12 @@ _TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "memory_write",
+            "name": "memory_upsert",
             "description": (
-                "Save a new durable memory the user wants to keep across future "
-                "sessions. Only call for stable, generalizable information."
+                "Create a new durable memory or replace the content of an "
+                "existing one. Pass memory_id to refine an existing memory; "
+                "omit it to create a new one. Only call for stable, "
+                "generalizable information worth recalling later."
             ),
             "parameters": {
                 "type": "object",
@@ -41,36 +43,27 @@ _TOOLS: list[dict[str, Any]] = [
                             "that survives outside the current chat."
                         ),
                     },
+                    "memory_id": {
+                        "type": "string",
+                        "description": (
+                            "Existing memory id to replace. Omit when creating "
+                            "a new memory."
+                        ),
+                    },
                     "scope": {
                         "type": "string",
                         "enum": ["global", "topical"],
                         "description": (
-                            "Use 'global' for preferences about response language, "
-                            "tone, length, or format that apply to every reply "
+                            "Only used when creating a new memory. Use 'global' "
+                            "for preferences about response language, tone, "
+                            "length, or format that apply to every reply "
                             "regardless of topic. Use 'topical' (default) for "
-                            "everything else, including domain-specific preferences."
+                            "everything else, including domain-specific "
+                            "preferences."
                         ),
                     },
                 },
                 "required": ["content"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "memory_update",
-            "description": (
-                "Replace the content of an existing memory when the user "
-                "contradicts or refines it."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "memory_id": {"type": "string"},
-                    "content": {"type": "string"},
-                },
-                "required": ["memory_id", "content"],
             },
         },
     },
@@ -90,8 +83,7 @@ _TOOLS: list[dict[str, Any]] = [
 
 
 _TOOL_NAME_MAP = {
-    "memory_write": "memory.write",
-    "memory_update": "memory.update",
+    "memory_upsert": "memory.upsert",
     "memory_delete": "memory.delete",
 }
 
@@ -100,20 +92,20 @@ _SYSTEM_PROMPT = """You are a helpful, friendly AI assistant. Your job is to ans
 
 To help you personalize, you have a long-term memory of things from past conversations. When relevant memories are available, they will appear under a <relevant_memories> tag. Use them naturally to inform your answer and to respect the user's preferences (language, tone, length, format, anything they've told you about themselves or their work). Don't mention the memory system unless the user asks about it — just be the kind of assistant who remembers.
 
-You also have background tools — memory_write, memory_update, memory_delete — to keep that long-term memory accurate. Use them when the conversation reveals something durable enough to be worth recalling later, but never let memory bookkeeping get in the way of giving a good answer. The answer is the product; memory is plumbing.
+You also have background tools — memory_upsert, memory_delete — to keep that long-term memory accurate. Use them when the conversation reveals something durable enough to be worth recalling later, but never let memory bookkeeping get in the way of giving a good answer. The answer is the product; memory is plumbing.
 
 When to update memory:
-- Write durable information: stable preferences, project facts, deferred tasks, deadlines. Uncertain dates/commitments still deserve a write — preserve the uncertainty in the content ("might be Friday", "user is not sure yet").
-- Never write transient state ("opened terminal", "drinking coffee"), small talk, or acknowledgements.
-- If a retrieved memory is contradicted or refined by the user, call memory_update on that memory_id; do not write a duplicate.
+- Save durable information: stable preferences, project facts, deferred tasks, deadlines. Uncertain dates/commitments still deserve a save — preserve the uncertainty in the content ("might be Friday", "user is not sure yet").
+- Never save transient state ("opened terminal", "drinking coffee"), small talk, or acknowledgements.
+- If a retrieved memory is contradicted or refined by the user, call memory_upsert with that memory_id to replace it; do not create a duplicate.
 - If the user asks to forget something, call memory_delete on the matching memory_id.
 - If the user restates something already in the retrieved memories without contradicting or refining it, do nothing.
 - Duplicate hygiene: if two or more retrieved memories state substantially the same fact, call memory_delete on the redundant ones and keep the most informative single version. Do this whenever you spot duplicates, even if the user's current message is unrelated.
 - If the message contains nothing durable, do nothing.
-- You may call multiple tools per turn (e.g. write a new fact AND delete a duplicate at the same time).
+- You may call multiple tools per turn (e.g. create a new memory AND delete a duplicate at the same time).
 - Memory content must be a third-person statement (e.g. "User prefers ...", not "I prefer ...").
 
-Choosing the scope (for memory_write):
+Choosing the scope (only when creating a new memory with memory_upsert):
 - global: preferences that should apply to every reply regardless of topic — language ("answer in French"), tone, length, format, output style.
 - topical: everything else, including domain-specific preferences ("prefers running in the morning", "prefers oat milk"). Default if you are unsure.
 """

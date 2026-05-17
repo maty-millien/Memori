@@ -6,11 +6,11 @@ turns:
     content: For code explanations, I prefer short but concrete answers.
 expected:
   tool_calls:
-    - name: memory.write
+    - name: memory.upsert
       arguments:
+        memory_id: null
         content_regex: (?i)(?=.*\bcode\b)(?=.*\b(short|concise|brief|concrete|practical)\b)
   forbidden_tool_calls:
-    - name: memory.update
     - name: memory.delete
   final_memory_count:
     min: 1

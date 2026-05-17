@@ -22,8 +22,7 @@ Before each model call, the system retrieves the most relevant memories from sto
 
 The LLM can still maintain memory through explicit tools:
 
-- `memory.write`
-- `memory.update`
+- `memory.upsert` (create when called without `memory_id`, replace when called with one)
 - `memory.delete`
 
 This keeps responsibilities separated:
@@ -39,7 +38,7 @@ User message
   -> automatic retrieval from memory database
   -> inject relevant memories into LLM context
   -> LLM answers with memory metadata available
-  -> LLM may call write/update/delete tools (including delete on duplicates)
+  -> LLM may call upsert/delete tools (including delete on duplicates)
   -> memory changes are saved
 ```
 
@@ -73,10 +72,11 @@ The LLM should not receive a general-purpose search tool in the main design.
 Instead, it receives maintenance tools:
 
 ```text
-memory.write(content, kind, confidence, source)
-memory.update(memory_id, content, confidence, reason)
-memory.delete(memory_id, reason)
+memory.upsert(content, memory_id?, scope?)
+memory.delete(memory_id)
 ```
+
+`memory.upsert` creates a new memory when `memory_id` is omitted and replaces the content of an existing memory when one is passed.
 
 The purpose of these tools is to let the model maintain the memory base when the conversation reveals durable information.
 
@@ -141,7 +141,7 @@ The retrieval system should produce both selected memories and an explanation of
 There is no separate consolidation pass. The LLM is responsible for keeping the memory base clean at write time, every time it is invoked with a user turn and retrieved memories:
 
 - if the user message restates an existing retrieved memory, write nothing
-- if the user message contradicts or refines a retrieved memory, call `memory.update`
+- if the user message contradicts or refines a retrieved memory, call `memory.upsert` with that `memory_id` to replace it
 - if the retrieved set contains two or more memories stating substantially the same fact, call `memory.delete` on the redundant ones and keep the most informative single version
 - if the user asks to forget something, call `memory.delete`
 
@@ -151,8 +151,8 @@ Roadmap:
 
 ```text
 V0: benchmark scenarios + scenario loader (current)
-V1: automatic retrieval + memory write tool
-V2: add update/delete tools
+V1: automatic retrieval + memory upsert tool
+V2: add delete tool
 V3: stronger scoring, conflict handling, explainability
 V4: (optional) periodic consolidation if write-time hygiene proves insufficient
 ```
@@ -164,7 +164,7 @@ The benchmark should evaluate the architecture as separate components first, the
 The core scenario types are:
 
 - `retrieval_injection`
-- `memory_tool_call` (covers write, update, delete, including duplicate pruning)
+- `memory_tool_call` (covers upsert, delete, including duplicate pruning)
 - `full_loop`
 
 This keeps failures diagnosable. If the full loop fails, the smaller component scenarios should reveal whether the issue is retrieval or tool-call behavior.
@@ -215,8 +215,8 @@ Tool-call scenarios test whether the LLM maintains memory correctly when it sees
 
 They check whether the model should:
 
-- call `memory.write`
-- call `memory.update`
+- call `memory.upsert` to create a new memory (no `memory_id`)
+- call `memory.upsert` to replace an existing memory (with `memory_id`)
 - call `memory.delete`
 - avoid calling any memory tool
 
@@ -230,37 +230,36 @@ turns:
     content: For code explanations, I prefer short but concrete answers.
 expected:
   tool_calls:
-    - name: memory.write
+    - name: memory.upsert
       arguments:
-        kind: preference
+        memory_id: null
         content_regex: (?i)\bcode\b.*\b(short|concise|brief)\b.*\b(concrete|practical)\b
   forbidden_tool_calls:
-    - name: memory.update
     - name: memory.delete
   final_memory_count:
     min: 1
     max: 1
 ```
 
-Updates target an existing memory by id (or a regex over ids in multi-session scenarios):
+Updates target an existing memory by id (or a regex over ids in multi-session scenarios). `memory_id: null` asserts a create-style upsert; a specific id (or `memory_id_regex`) asserts a replace:
 
 ```yaml
 initial_memories:
   - id: mem_report_style
-    kind: preference
     content: User prefers very detailed technical reports with many explanations.
 turns:
   - role: user
     content: Actually, for technical reports, I now want something short, clear, and results-oriented.
 expected:
   tool_calls:
-    - name: memory.update
+    - name: memory.upsert
       arguments:
         memory_id: mem_report_style
         content_regex: (?i)\btechnical reports?\b.*\b(short|concise)\b.*\b(clear|results?-oriented|results?)\b
   forbidden_tool_calls:
-    - name: memory.write
+    - name: memory.upsert
       arguments:
+        memory_id: null
         content_regex: (?i)\btechnical reports?\b
 ```
 
@@ -273,7 +272,7 @@ turns:
 expected:
   tool_calls: []
   forbidden_tool_calls:
-    - name: memory.write
+    - name: memory.upsert
       arguments:
         content_regex: (?i)\bterminal\b|\bcoffee\b|\bplaylist\b
   final_memory_count:
@@ -305,15 +304,15 @@ sessions:
         content: For this project, answer in French. Also, Memori should be a CLI-first memory prototype.
     expected:
       tool_calls:
-        - name: memory.write
+        - name: memory.upsert
           arguments:
-            kind: preference
+            memory_id: null
             content_regex: (?i)\bFrench\b
-        - name: memory.write
+        - name: memory.upsert
           arguments:
-            kind: project
+            memory_id: null
             content_regex: (?i)\bMemori\b.*\bCLI\b.*\bmemory\b
-      final_memory_count: { min: 2, max: 2 }
+      final_memory_count: { min: 1, max: 2 }
   - id: chat_3_retrieve
     expected_injected_memory_ids:
       include: [mem_project_cli, mem_language]

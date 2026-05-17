@@ -152,7 +152,7 @@ def _call_matches(actual: ToolCall, expected: dict[str, Any]) -> bool:
 
 def _apply_tool_call(call: ToolCall, engine: MemoryEngine) -> None:
     try:
-        if call.name in ("memory.write", "memory.update"):
+        if call.name == "memory.upsert":
             engine.upsert(
                 content=call.arguments.get("content", ""),
                 scope=cast(Scope, call.arguments.get("scope", "topical")),

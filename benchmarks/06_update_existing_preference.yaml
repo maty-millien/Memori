@@ -8,13 +8,14 @@ turns:
     content: Actually, for technical reports, I now want something short, clear, and results-oriented.
 expected:
   tool_calls:
-    - name: memory.update
+    - name: memory.upsert
       arguments:
         memory_id: mem_report_style
         content_regex: (?i)(?=.*\breports?\b)(?=.*\b(short|concise|brief|clear|results?)\b)
   forbidden_tool_calls:
-    - name: memory.write
+    - name: memory.upsert
       arguments:
+        memory_id: null
         content_regex: (?i)\btechnical reports?\b
   final_memory_count:
     min: 1

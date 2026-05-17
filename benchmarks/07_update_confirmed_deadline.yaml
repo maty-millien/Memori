@@ -8,13 +8,14 @@ turns:
     content: It is confirmed now, the final presentation is on Wednesday.
 expected:
   tool_calls:
-    - name: memory.update
+    - name: memory.upsert
       arguments:
         memory_id: mem_deadline_uncertain
         content_regex: (?i)(?=.*\bpresentation\b)(?=.*\bWednesday\b)
   forbidden_tool_calls:
-    - name: memory.write
+    - name: memory.upsert
       arguments:
+        memory_id: null
         content_regex: (?i)\bpresentation\b
   final_memory_count:
     min: 1
