@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, cast
 
-from core.engine import Memory, MemoryEngine, Scope
+from core.engine import Memory, MemoryEngine, Retrieved, Scope
 from benchmark.judge import judge_trait
 from core.llm import ToolCall, call_with_tools
 
@@ -34,37 +34,99 @@ def _memory_from_dict(raw: dict[str, Any]) -> Memory:
     )
 
 
+def _fence(log: LogFn, lang: str, body: str) -> None:
+    log(f"```{lang}")
+    for line in body.splitlines() or [""]:
+        log(line)
+    log("```")
+
+
+def _label(log: LogFn, text: str) -> None:
+    log("")
+    log(f"**{text}**")
+    log("")
+
+
+def _yaml_memory_block(memories: list[Memory]) -> str:
+    rows: list[str] = []
+    for m in memories:
+        rows.append(f'- id: "{m.id}"')
+        rows.append(f"  content: {json.dumps(m.content, ensure_ascii=False)}")
+    return "\n".join(rows)
+
+
+def _log_memories(log: LogFn, label: str, memories: list[Memory]) -> None:
+    _label(log, label)
+    if not memories:
+        log("_(none)_")
+        return
+    _fence(log, "yaml", _yaml_memory_block(memories))
+
+
+def _log_retrieved(
+    log: LogFn, items: list[Retrieved], *, with_reason: bool = True
+) -> None:
+    _label(log, "Retrieved")
+    if not items:
+        log("_(none)_")
+        return
+    rows: list[str] = []
+    for r in items:
+        rows.append(f'- id: "{r.memory.id}"')
+        rows.append(f"  score: {r.score:.3f}")
+        if with_reason:
+            rows.append(f"  reason: {json.dumps(r.reason, ensure_ascii=False)}")
+        rows.append(f"  content: {json.dumps(r.memory.content, ensure_ascii=False)}")
+    _fence(log, "yaml", "\n".join(rows))
+
+
+def _log_tool_calls(log: LogFn, calls: list[ToolCall]) -> None:
+    _label(log, "Tool calls")
+    if not calls:
+        log("_(none)_")
+        return
+    payload = [{"name": c.name, "arguments": c.arguments} for c in calls]
+    _fence(log, "json", json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def _log_text(log: LogFn, label: str, text: str) -> None:
+    _label(log, label)
+    _fence(log, "text", text)
+
+
+def _log_quote(log: LogFn, label: str, text: str, *, italic: bool = False) -> None:
+    _label(log, label)
+    for line in text.splitlines() or [""]:
+        if not line:
+            log(">")
+        elif italic:
+            log(f"> _{line}_")
+        else:
+            log(f"> {line}")
+
+
 def _log_header(log: LogFn, scenario: dict[str, Any]) -> None:
+    log("---")
+    log("")
     log(
-        f"## `{scenario.get('id', '<unknown>')}` — type=`{scenario.get('type', '<unknown>')}`"
+        f"## `{scenario.get('id', '<unknown>')}` — `{scenario.get('type', '<unknown>')}`"
     )
 
 
 def _log_initial_memories(log: LogFn, memories: list[dict[str, Any]]) -> None:
-    if not memories:
-        log("**Initial memories:** _(none)_")
-        return
-    log("**Initial memories:**")
-    for m in memories:
-        log(f"- `{m['id']}` — {m['content']}")
+    _log_memories(log, "Initial memories", [_memory_from_dict(m) for m in memories])
 
 
 def _log_snapshot(log: LogFn, engine: MemoryEngine) -> None:
-    snap = engine.all()
-    if not snap:
-        log("**Final memory state:** _(empty)_")
-        return
-    log("**Final memory state:**")
-    for m in snap:
-        log(f"- `{m.id}` — {m.content}")
+    _log_memories(log, "Final memory state", engine.all())
 
 
 def _log_result(log: LogFn, status: Status, failures: list[str]) -> None:
-    log("")
-    log(f"**Result:** {status.upper()}")
-    for f in failures:
-        log(f"- {f}")
-    log("")
+    _label(log, f"Result: {status.upper()}")
+    if failures:
+        for f in failures:
+            log(f"- {f}")
+        log("")
 
 
 def grade_retrieval_injection(
@@ -77,8 +139,7 @@ def grade_retrieval_injection(
 
     user_turns = [t for t in scenario.get("turns", []) if t.get("role") == "user"]
     query = user_turns[-1]["content"] if user_turns else ""
-    log("")
-    log(f"**User turn:** {query}")
+    _log_text(log, "User turn", query)
 
     expected = scenario.get("expected", {}) or {}
     ids_spec = expected.get("injected_memory_ids", {}) or {}
@@ -86,13 +147,7 @@ def grade_retrieval_injection(
 
     retrieved = engine.retrieve(query)
     retrieved_ids = [r.memory.id for r in retrieved]
-    log("")
-    log("**Retrieved:**")
-    if not retrieved:
-        log("- _(no memories)_")
-    for r in retrieved:
-        log(f"- `[{r.score:.3f}]` `{r.memory.id}` — {r.memory.content}")
-        log(f"  - _reason:_ {r.reason}")
+    _log_retrieved(log, retrieved)
 
     failures: list[str] = []
     for required in ids_spec.get("include", []) or []:
@@ -162,6 +217,18 @@ def _apply_tool_call(call: ToolCall, engine: MemoryEngine) -> None:
         return
 
 
+def _log_llm_exchange(log: LogFn, result: Any) -> Any:
+    _log_text(log, "LLM user message (verbatim)", result.user_message)
+    reasoning = result.assistant_message.get("reasoning")
+    if reasoning:
+        _log_quote(log, "LLM reasoning trace", str(reasoning), italic=True)
+    _log_tool_calls(log, result.tool_calls)
+    assistant_content = result.assistant_message.get("content")
+    if assistant_content:
+        _log_quote(log, "LLM assistant content", str(assistant_content))
+    return assistant_content
+
+
 def grade_memory_tool_call(
     scenario: dict[str, Any], engine: MemoryEngine, log: LogFn = _noop
 ) -> ScenarioResult:
@@ -181,53 +248,17 @@ def grade_memory_tool_call(
             messages=early_failures,
         )
     user_content = user_turns[-1]["content"]
-    log("")
-    log(f"**User turn:** {user_content}")
+    _log_text(log, "User turn", user_content)
 
     injected = [r.memory for r in engine.retrieve(user_content)]
-    log("")
-    log("**Injected memories (sent to LLM):**")
-    if not injected:
-        log("- _(none)_")
-    for m in injected:
-        log(f"- `{m.id}` — {m.content}")
+    _log_memories(log, "Injected memories (sent to LLM)", injected)
 
     result = call_with_tools(user_content, injected)
-    log("")
-    log("**LLM user message (verbatim):**")
-    log("")
-    log("```text")
-    for line in result.user_message.splitlines():
-        log(line)
-    log("```")
-
-    reasoning = result.assistant_message.get("reasoning")
-    if reasoning:
-        log("")
-        log("**LLM reasoning trace:**")
-        log("")
-        for line in str(reasoning).splitlines():
-            log(f"> _{line}_" if line else ">")
-
-    log("")
-    log("**Tool calls:**")
-    if not result.tool_calls:
-        log("- _(no tool calls)_")
-    for call in result.tool_calls:
-        log(f"- `{call.name}({json.dumps(call.arguments, ensure_ascii=False)})`")
-
-    assistant_content = result.assistant_message.get("content")
-    if assistant_content:
-        log("")
-        log("**LLM assistant content:**")
-        log("")
-        for line in str(assistant_content).splitlines():
-            log(f"> {line}")
+    _log_llm_exchange(log, result)
 
     for call in result.tool_calls:
         _apply_tool_call(call, engine)
 
-    log("")
     _log_snapshot(log, engine)
 
     expected = scenario.get("expected", {}) or {}
@@ -306,7 +337,7 @@ def grade_full_loop(
         session_id = session.get("id", "<session>")
         context = f"[{session_id}]"
         log("")
-        log(f"### Session: {session_id}")
+        log(f"### Session · `{session_id}`")
 
         if "initial_memories" in session:
             initial_raw = session.get("initial_memories", []) or []
@@ -320,18 +351,12 @@ def grade_full_loop(
             failures.append(f"{context} session has no user turn")
             continue
         user_content = user_turns[-1]["content"]
-        log("")
-        log(f"**User turn:** {user_content}")
+        _log_text(log, "User turn", user_content)
 
         injected_content_spec = session.get("expected_injected_content", {}) or {}
 
         retrieved = engine.retrieve(user_content)
-        log("")
-        log("**Retrieved:**")
-        if not retrieved:
-            log("- _(no memories)_")
-        for r in retrieved:
-            log(f"- `[{r.score:.3f}]` `{r.memory.id}` — {r.memory.content}")
+        _log_retrieved(log, retrieved, with_reason=False)
 
         retrieved_text = " ".join(r.memory.content for r in retrieved)
         failures.extend(
@@ -342,42 +367,11 @@ def grade_full_loop(
 
         injected_memories = [r.memory for r in retrieved]
         result = call_with_tools(user_content, injected_memories)
-
-        log("")
-        log("**LLM user message (verbatim):**")
-        log("")
-        log("```text")
-        for line in result.user_message.splitlines():
-            log(line)
-        log("```")
-
-        reasoning = result.assistant_message.get("reasoning")
-        if reasoning:
-            log("")
-            log("**LLM reasoning trace:**")
-            log("")
-            for line in str(reasoning).splitlines():
-                log(f"> _{line}_" if line else ">")
-
-        log("")
-        log("**Tool calls:**")
-        if not result.tool_calls:
-            log("- _(no tool calls)_")
-        for call in result.tool_calls:
-            log(f"- `{call.name}({json.dumps(call.arguments, ensure_ascii=False)})`")
-
-        assistant_content = result.assistant_message.get("content")
-        if assistant_content:
-            log("")
-            log("**LLM assistant content:**")
-            log("")
-            for line in str(assistant_content).splitlines():
-                log(f"> {line}")
+        assistant_content = _log_llm_exchange(log, result)
 
         for call in result.tool_calls:
             _apply_tool_call(call, engine)
 
-        log("")
         _log_snapshot(log, engine)
 
         expected = session.get("expected", {}) or {}
@@ -392,11 +386,10 @@ def grade_full_loop(
 
         traits = expected.get("answer_traits", []) or []
         if traits:
-            log("")
-            log("**Answer trait checks:**")
+            _label(log, "Answer trait checks")
         for trait in traits:
             verdict = judge_trait(str(assistant_content or ""), trait)
-            log(f"- **{'PASS' if verdict.passed else 'FAIL'}:** {trait}")
+            log(f"- **{'PASS' if verdict.passed else 'FAIL'}** — {trait}")
             log(f"  - _reason:_ {verdict.reason}")
             if not verdict.passed:
                 failures.append(
@@ -449,9 +442,10 @@ def grade(
     scenario_type = scenario.get("type", "")
     grader = _GRADERS.get(scenario_type)
     if grader is None:
-        log(
-            f"## `{scenario.get('id', '<unknown>')}` — type=`{scenario_type}` _(skipped)_"
-        )
+        log("---")
+        log("")
+        log(f"## `{scenario.get('id', '<unknown>')}` — `{scenario_type}` _(skipped)_")
+        log("")
         log(f"- no grader implemented for type '{scenario_type}'")
         log("")
         return ScenarioResult(
