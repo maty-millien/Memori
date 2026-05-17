@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from typing import Any, cast
 
 from core.engine import Memory
-from core.openrouter import get_client
+from core.env import require
+from core.openrouter import OpenRouterClient
 
 
 @dataclass
@@ -119,22 +119,13 @@ Choosing the scope (for memory_write):
 """
 
 
-_JUDGE_PROMPT = """You are a strict evaluator. Given an assistant's answer and a trait that should hold true about that answer, decide whether it holds.
-
-Respond with strictly "yes" or "no" as the very first word of your reply, then a short reason on the same line."""
-
-
 def _format_injected(memories: list[Memory]) -> str:
     return "\n".join(f"- id: {m.id}\n  content: {m.content}" for m in memories)
 
 
 def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
-    model = os.environ.get("MEMORI_LLM_MODEL")
-    if not model:
-        raise RuntimeError("MEMORI_LLM_MODEL must be set to call the LLM")
-    reasoning_effort = os.environ.get("MEMORI_REASONING_EFFORT")
-    if not reasoning_effort:
-        raise RuntimeError("MEMORI_REASONING_EFFORT must be set to call the LLM")
+    model = require("MEMORI_LLM_MODEL")
+    reasoning_effort = require("MEMORI_REASONING_EFFORT")
 
     if retrieved:
         user_message = (
@@ -144,7 +135,7 @@ def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
     else:
         user_message = user_content
 
-    body = get_client().chat_completions(
+    body = OpenRouterClient().chat_completions(
         {
             "model": model,
             "messages": [
@@ -181,34 +172,3 @@ def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
         user_message=user_message,
         assistant_message=assistant_message,
     )
-
-
-@dataclass
-class JudgeVerdict:
-    passed: bool
-    reason: str
-
-
-def judge_trait(answer: str, trait: str) -> JudgeVerdict:
-    model = os.environ.get("MEMORI_LLM_MODEL")
-    if not model:
-        raise RuntimeError("MEMORI_LLM_MODEL must be set to call the judge")
-
-    user_message = f"ASSISTANT ANSWER:\n---\n{answer}\n---\n\nTRAIT TO VERIFY:\n{trait}"
-    body = get_client().chat_completions(
-        {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": _JUDGE_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
-            "reasoning": {"effort": "low"},
-        },
-        timeout=120.0,
-    )
-    content = ""
-    for choice in body.get("choices", []):
-        content = choice.get("message", {}).get("content", "") or ""
-    first_line = content.strip().split("\n", 1)[0].strip().lower()
-    passed = first_line.startswith("yes")
-    return JudgeVerdict(passed=passed, reason=content.strip())

@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, cast
 
 from core.engine import Memory, MemoryEngine, Scope
-from core.llm import ToolCall, call_with_tools, judge_trait
+from benchmark.judge import judge_trait
+from core.llm import ToolCall, call_with_tools
 
 
 Status = Literal["passed", "failed", "skipped"]
