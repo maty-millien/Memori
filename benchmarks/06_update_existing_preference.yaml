@@ -1,7 +1,7 @@
 id: 06_update_existing_preference
 type: memory_tool_call
 initial_memories:
-  - id: mem_report_style
+  - id: "1"
     content: User prefers very detailed technical reports with many explanations.
 turns:
   - role: user
@@ -10,7 +10,7 @@ expected:
   tool_calls:
     - name: memory.upsert
       arguments:
-        memory_id: mem_report_style
+        memory_id: "1"
         content_regex: (?i)(?=.*\breports?\b)(?=.*\b(short|concise|brief|clear|results?)\b)
   forbidden_tool_calls:
     - name: memory.upsert

@@ -1,9 +1,9 @@
 id: 02_retrieve_topic_isolation
 type: retrieval_injection
 initial_memories:
-  - id: mem_cli
+  - id: "1"
     content: TaskFlow should provide a Python CLI with add, list, complete, and search commands.
-  - id: mem_workout
+  - id: "2"
     content: User prefers running workouts in the morning.
 turns:
   - role: user
@@ -11,7 +11,7 @@ turns:
 expected:
   injected_memory_ids:
     include:
-      - mem_cli
+      - "1"
     max_count: 2
   injected_memory_content:
     should_match:

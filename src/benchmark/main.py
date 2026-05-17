@@ -26,9 +26,7 @@ def _summarize(results: list[ScenarioResult]) -> tuple[int, int, int]:
 def main() -> None:
     load_dotenv()
     _RUNS_DIR.mkdir(exist_ok=True)
-    log_path = (
-        _RUNS_DIR / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.log"
-    )
+    log_path = _RUNS_DIR / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.md"
 
     with log_path.open("w", encoding="utf-8") as log_file:
 
@@ -36,8 +34,11 @@ def main() -> None:
             log_file.write(line + "\n")
 
         scenarios = load_scenarios()
-        log(f"Memori benchmark run @ {datetime.now(timezone.utc).isoformat()}")
-        log(f"Scenarios: {len(scenarios)}")
+        log("# Memori benchmark run")
+        log("")
+        log(
+            f"_{datetime.now(timezone.utc).isoformat()}_  ·  **Scenarios:** {len(scenarios)}"
+        )
         log("")
 
         def _run(sc: dict) -> tuple[ScenarioResult, list[str]]:
@@ -55,15 +56,16 @@ def main() -> None:
         results: list[ScenarioResult] = [r for r, _ in pairs]
 
         passed, failed, skipped = _summarize(results)
-        log("=" * 78)
-        log("SUMMARY")
-        log("=" * 78)
-        for r in results:
-            log(f"[{_SYMBOLS[r.status]}] {r.scenario_id} ({r.scenario_type})")
-            for message in r.messages:
-                log(f"       {message}")
+        log("## Summary")
         log("")
-        log(f"{passed} passed, {failed} failed, {skipped} skipped (of {len(results)})")
+        for r in results:
+            log(f"- **{_SYMBOLS[r.status]}** `{r.scenario_id}` ({r.scenario_type})")
+            for message in r.messages:
+                log(f"  - {message}")
+        log("")
+        log(
+            f"**{passed} passed, {failed} failed, {skipped} skipped (of {len(results)})**"
+        )
 
     for r in results:
         print(f"[{_SYMBOLS[r.status]}] {r.scenario_id} ({r.scenario_type})")

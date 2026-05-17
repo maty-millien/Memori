@@ -1,9 +1,9 @@
 id: 01_retrieve_project_context
 type: retrieval_injection
 initial_memories:
-  - id: mem_project
+  - id: "1"
     content: User is building TaskFlow, a CLI-based task management tool.
-  - id: mem_running
+  - id: "2"
     content: User prefers running in the morning rather than in the evening.
 turns:
   - role: user
@@ -11,7 +11,7 @@ turns:
 expected:
   injected_memory_ids:
     include:
-      - mem_project
+      - "1"
     max_count: 3
   injected_memory_content:
     should_match:

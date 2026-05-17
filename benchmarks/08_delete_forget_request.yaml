@@ -1,7 +1,7 @@
 id: 08_delete_forget_request
 type: memory_tool_call
 initial_memories:
-  - id: mem_workout
+  - id: "1"
     content: User prefers running in the morning.
 turns:
   - role: user
@@ -10,7 +10,7 @@ expected:
   tool_calls:
     - name: memory.delete
       arguments:
-        memory_id: mem_workout
+        memory_id: "1"
   forbidden_tool_calls:
     - name: memory.upsert
       arguments:
