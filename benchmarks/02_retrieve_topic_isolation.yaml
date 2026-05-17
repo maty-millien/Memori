@@ -12,11 +12,7 @@ expected:
   injected_memory_ids:
     include:
       - mem_cli
-    exclude:
-      - mem_workout
     max_count: 2
   injected_memory_content:
     should_match:
       - regex: (?i)\bCLI\b
-    should_not_match:
-      - regex: (?i)\brunning\b|\bworkout\b

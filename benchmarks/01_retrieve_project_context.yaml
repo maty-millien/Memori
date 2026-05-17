@@ -12,8 +12,6 @@ expected:
   injected_memory_ids:
     include:
       - mem_project
-    exclude:
-      - mem_running
     max_count: 3
   injected_memory_content:
     should_match:

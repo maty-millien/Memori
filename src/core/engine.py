@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from itertools import count
 
-from core.env import require
 from core.store import Memory, MemoryStore, Scope
+
+
+RETRIEVAL_TOP_K = 10
 
 
 @dataclass
@@ -20,13 +22,10 @@ class MemoryEngine:
         existing_n = [int(m.id) for m in self._store.all() if m.id.isdigit()]
         self._auto_id = count(max(existing_n, default=0) + 1)
 
-    def retrieve(self, query: str, top_k: int) -> list[Retrieved]:
-        min_score = float(require("MEMORI_RETRIEVAL_MIN_SCORE"))
+    def retrieve(self, query: str) -> list[Retrieved]:
         out: list[Retrieved] = []
         kept: set[str] = set()
-        for mem, score in self._store.query(query, top_k):
-            if score < min_score:
-                continue
+        for mem, score in self._store.query(query, RETRIEVAL_TOP_K):
             out.append(
                 Retrieved(
                     memory=mem, score=score, reason=f"cosine similarity {score:.3f}"

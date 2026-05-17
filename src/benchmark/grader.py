@@ -86,12 +86,12 @@ def grade_retrieval_injection(
     ids_spec = expected.get("injected_memory_ids", {}) or {}
     max_count = ids_spec.get("max_count", 10)
 
-    retrieved = engine.retrieve(query, top_k=max_count)
+    retrieved = engine.retrieve(query)
     retrieved_ids = [r.memory.id for r in retrieved]
     log("")
-    log(f"Retrieved (top_k={max_count}):")
+    log("Retrieved:")
     if not retrieved:
-        log("  (nothing above similarity threshold)")
+        log("  (no memories)")
     for r in retrieved:
         log(f"  - [score={r.score:.3f}] {r.memory.id}: {r.memory.content}")
         log(f"    reason: {r.reason}")
@@ -186,7 +186,7 @@ def grade_memory_tool_call(
     log("")
     log(f"User turn: {user_content}")
 
-    injected = [r.memory for r in engine.retrieve(user_content, top_k=10)]
+    injected = [r.memory for r in engine.retrieve(user_content)]
     log("")
     log("Injected memories (sent to LLM):")
     if not injected:
@@ -323,13 +323,12 @@ def grade_full_loop(
         log(f"User turn: {user_content}")
 
         injected_content_spec = session.get("expected_injected_content", {}) or {}
-        max_count = injected_content_spec.get("max_count", 10)
 
-        retrieved = engine.retrieve(user_content, top_k=max_count)
+        retrieved = engine.retrieve(user_content)
         log("")
-        log(f"Retrieved (top_k={max_count}):")
+        log("Retrieved:")
         if not retrieved:
-            log("  (nothing above similarity threshold)")
+            log("  (no memories)")
         for r in retrieved:
             log(f"  - [score={r.score:.3f}] {r.memory.id}: {r.memory.content}")
 
