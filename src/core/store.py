@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Literal, cast
 
 import chromadb
@@ -13,6 +14,11 @@ from core.openrouter import OpenRouterClient
 
 Embedding = Sequence[float] | Sequence[int]
 Scope = Literal["global", "topical"]
+Kind = Literal["memory", "conversation"]
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 @dataclass
@@ -20,6 +26,8 @@ class Memory:
     id: str
     content: str
     scope: Scope = "topical"
+    kind: Kind = "memory"
+    created_at: datetime = field(default_factory=_now)
 
 
 def _embed(texts: list[str]) -> list[Embedding]:
@@ -28,8 +36,14 @@ def _embed(texts: list[str]) -> list[Embedding]:
 
 
 def _to_memory(mid: str, doc: str, meta: Mapping[str, Any] | None) -> Memory:
+    m = meta or {}
+    ts = m.get("created_at")
     return Memory(
-        id=mid, content=doc, scope=cast(Scope, (meta or {}).get("scope", "topical"))
+        id=mid,
+        content=doc,
+        scope=cast(Scope, m.get("scope", "topical")),
+        kind=cast(Kind, m.get("kind", "memory")),
+        created_at=datetime.fromisoformat(ts) if isinstance(ts, str) else _now(),
     )
 
 
@@ -51,7 +65,14 @@ class MemoryStore:
             ids=[m.id for m in items],
             documents=contents,
             embeddings=_embed(contents),
-            metadatas=[{"scope": m.scope} for m in items],
+            metadatas=[
+                {
+                    "scope": m.scope,
+                    "kind": m.kind,
+                    "created_at": m.created_at.isoformat(),
+                }
+                for m in items
+            ],
         )
 
     def delete(self, ids: list[str]) -> None:
@@ -68,8 +89,12 @@ class MemoryStore:
         metas = self._collection.get(ids=[memory_id]).get("metadatas") or []
         return cast(Scope, metas[0].get("scope", "topical"))
 
-    def all(self) -> list[Memory]:
-        res = self._collection.get()
+    def all(self, kind: Kind | None = None) -> list[Memory]:
+        res = (
+            self._collection.get(where={"kind": kind})
+            if kind
+            else self._collection.get()
+        )
         return [
             _to_memory(mid, doc, meta)
             for mid, doc, meta in zip(
@@ -77,11 +102,16 @@ class MemoryStore:
             )
         ]
 
-    def query(self, text: str, top_k: int) -> list[tuple[Memory, float]]:
+    def query(
+        self, text: str, top_k: int, kind: Kind | None = None
+    ) -> list[tuple[Memory, float]]:
         n = min(top_k, self.count())
         if n <= 0:
             return []
-        res = self._collection.query(query_embeddings=_embed([text]), n_results=n)
+        kwargs: dict[str, Any] = {"query_embeddings": _embed([text]), "n_results": n}
+        if kind:
+            kwargs["where"] = {"kind": kind}
+        res = self._collection.query(**kwargs)
         return [
             (_to_memory(mid, doc, meta), 1.0 - float(dist))
             for mid, doc, dist, meta in zip(

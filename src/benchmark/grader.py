@@ -118,7 +118,7 @@ def _log_initial_memories(log: LogFn, memories: list[dict[str, Any]]) -> None:
 
 
 def _log_snapshot(log: LogFn, engine: MemoryEngine) -> None:
-    _log_memories(log, "Final memory state", engine.all())
+    _log_memories(log, "Final memory state", engine.get_all_memories())
 
 
 def _log_result(log: LogFn, status: Status, failures: list[str]) -> None:
@@ -145,7 +145,7 @@ def grade_retrieval_injection(
     ids_spec = expected.get("injected_memory_ids", {}) or {}
     max_count = ids_spec.get("max_count", 10)
 
-    retrieved = engine.retrieve(query)
+    retrieved = engine.retrieve_memories(query)
     retrieved_ids = [r.memory.id for r in retrieved]
     _log_retrieved(log, retrieved)
 
@@ -250,10 +250,13 @@ def grade_memory_tool_call(
     user_content = user_turns[-1]["content"]
     _log_text(log, "User turn", user_content)
 
-    injected = [r.memory for r in engine.retrieve(user_content)]
+    injected = [r.memory for r in engine.retrieve_memories(user_content)]
     _log_memories(log, "Injected memories (sent to LLM)", injected)
+    recent, similar = engine.retrieve_conversations(user_content)
+    _log_memories(log, "Recent conversations (sent to LLM)", recent)
+    _log_memories(log, "Similar conversations (sent to LLM)", similar)
 
-    result = call_with_tools(user_content, injected)
+    result = call_with_tools(user_content, injected, recent, similar)
     _log_llm_exchange(log, result)
 
     for call in result.tool_calls:
@@ -265,7 +268,7 @@ def grade_memory_tool_call(
     failures = _check_tool_calls(result.tool_calls, expected)
     failures.extend(
         _check_count_spec(
-            len(engine.all()),
+            len(engine.get_all_memories()),
             expected.get("final_memory_count", {}) or {},
             "final",
         )
@@ -355,7 +358,7 @@ def grade_full_loop(
 
         injected_content_spec = session.get("expected_injected_content", {}) or {}
 
-        retrieved = engine.retrieve(user_content)
+        retrieved = engine.retrieve_memories(user_content)
         _log_retrieved(log, retrieved, with_reason=False)
 
         retrieved_text = " ".join(r.memory.content for r in retrieved)
@@ -366,11 +369,16 @@ def grade_full_loop(
         )
 
         injected_memories = [r.memory for r in retrieved]
-        result = call_with_tools(user_content, injected_memories)
+        recent, similar = engine.retrieve_conversations(user_content)
+        _log_memories(log, "Recent conversations (sent to LLM)", recent)
+        _log_memories(log, "Similar conversations (sent to LLM)", similar)
+        result = call_with_tools(user_content, injected_memories, recent, similar)
         assistant_content = _log_llm_exchange(log, result)
 
         for call in result.tool_calls:
             _apply_tool_call(call, engine)
+
+        engine.record_conversation_summary(session.get("turns", []) or [])
 
         _log_snapshot(log, engine)
 
@@ -378,7 +386,7 @@ def grade_full_loop(
         failures.extend(_check_tool_calls(result.tool_calls, expected, context))
         failures.extend(
             _check_count_spec(
-                len(engine.all()),
+                len(engine.get_all_memories()),
                 expected.get("final_memory_count", {}) or {},
                 f"{context} final",
             )
@@ -402,7 +410,7 @@ def grade_full_loop(
         log("")
         log("### Final state assertions")
         _log_snapshot(log, engine)
-        snapshot = engine.all()
+        snapshot = engine.get_all_memories()
         failures.extend(
             _check_count_spec(
                 len(snapshot),

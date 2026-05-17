@@ -1,0 +1,53 @@
+id: 11_conversation_similar_disambiguates
+type: full_loop
+sessions:
+  - id: chat_1_recipe
+    initial_memories: []
+    expected_injected_content:
+      should_match: []
+    turns:
+      - role: user
+        content: What's a quick weeknight pasta recipe with mushrooms and garlic?
+    expected:
+      forbidden_tool_calls:
+        - name: memory.upsert
+      final_memory_count:
+        min: 0
+        max: 0
+  - id: chat_2_python
+    turns:
+      - role: user
+        content: How do I sort a list of dictionaries by a nested key in Python?
+    expected:
+      forbidden_tool_calls:
+        - name: memory.upsert
+      final_memory_count:
+        min: 0
+        max: 0
+  - id: chat_3_travel
+    turns:
+      - role: user
+        content: What's the cheapest way to get from Berlin to Prague?
+    expected:
+      forbidden_tool_calls:
+        - name: memory.upsert
+      final_memory_count:
+        min: 0
+        max: 0
+  - id: chat_4_recall_python
+    turns:
+      - role: user
+        content: Remind me of the programming question I asked you earlier.
+    expected:
+      answer_traits:
+        - The answer references sorting dictionaries (or a list of dicts) by a nested key in Python.
+      forbidden_tool_calls:
+        - name: memory.upsert
+      final_memory_count:
+        min: 0
+        max: 0
+final_state:
+  expected:
+    final_memory_count:
+      min: 0
+      max: 0

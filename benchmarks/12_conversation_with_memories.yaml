@@ -1,0 +1,59 @@
+id: 12_conversation_with_memories
+type: full_loop
+sessions:
+  - id: chat_1_durable_preference
+    initial_memories: []
+    expected_injected_content:
+      should_match: []
+    turns:
+      - role: user
+        content: For all code answers, please use TypeScript instead of JavaScript.
+    expected:
+      tool_calls:
+        - name: memory.upsert
+          arguments:
+            memory_id: null
+            content_regex: (?i)(?=.*\bTypeScript\b)
+      final_memory_count:
+        min: 1
+        max: 1
+  - id: chat_2_factual_chat
+    turns:
+      - role: user
+        content: Out of curiosity, what is the largest desert on Earth?
+    expected:
+      forbidden_tool_calls:
+        - name: memory.upsert
+      final_memory_count:
+        min: 1
+        max: 1
+  - id: chat_3_combined
+    expected_injected_content:
+      should_match:
+        - regex: (?i)\bTypeScript\b
+      should_not_match:
+        - regex: (?i)\bdesert\b
+    turns:
+      - role: user
+        content: Show me a short example sorting an array of objects by a property. Also, what natural feature did we just discuss?
+    expected:
+      answer_traits:
+        - The code example is written in TypeScript (uses type annotations or TypeScript syntax) rather than plain JavaScript.
+        - The answer references a desert (Sahara, Antarctica, or any desert).
+      forbidden_tool_calls:
+        - name: memory.upsert
+          arguments:
+            content_regex: (?i)\bdesert\b
+      final_memory_count:
+        min: 1
+        max: 1
+final_state:
+  expected:
+    final_memory_count:
+      min: 1
+      max: 1
+    final_memories:
+      should_match:
+        - regex: (?i)\bTypeScript\b
+      should_not_match:
+        - regex: (?i)\bdesert\b

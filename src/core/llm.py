@@ -90,7 +90,7 @@ _TOOL_NAME_MAP = {
 
 _SYSTEM_PROMPT = """You are a helpful, friendly AI assistant. Your job is to answer the user's questions and help with what they ask — clearly, concisely, and in a way that fits them.
 
-To help you personalize, you have a long-term memory of things from past conversations. When relevant memories are available, they will appear under a <relevant_memories> tag. Use them naturally to inform your answer and to respect the user's preferences (language, tone, length, format, anything they've told you about themselves or their work). Don't mention the memory system unless the user asks about it — just be the kind of assistant who remembers.
+To help you personalize, you have a long-term memory of things from past conversations. When relevant memories are available, they will appear under a <relevant_memories> tag. Use them naturally to inform your answer and to respect the user's preferences (language, tone, length, format, anything they've told you about themselves or their work). You may also see <recent_conversations> (the 5 most recent past chats) and <similar_conversations> (the 5 past chats most similar to the current message); each entry is prefixed with a `[YYYY-MM-DD HH:MM]` timestamp so you can answer questions like "what did we discuss this morning?". Don't mention the memory system unless the user asks about it — just be the kind of assistant who remembers.
 
 You also have background tools — memory_upsert, memory_delete — to keep that long-term memory accurate. Use them when the conversation reveals something durable enough to be worth recalling later, but never let memory bookkeeping get in the way of giving a good answer. The answer is the product; memory is plumbing.
 
@@ -115,20 +115,40 @@ def _format_injected(memories: list[Memory]) -> str:
     return "\n".join(f'- id: "{m.id}"\n  content: {m.content}' for m in memories)
 
 
+def _format_conversations(memories: list[Memory]) -> str:
+    return "\n".join(
+        f"- [{m.created_at.strftime('%Y-%m-%d %H:%M')}] {m.content}" for m in memories
+    )
+
+
+def _wrap(tag: str, body: str) -> str:
+    return f"<{tag}>\n{body}\n</{tag}>"
+
+
 _MAX_ATTEMPTS = 3
 
 
-def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
+def call_with_tools(
+    user_content: str,
+    retrieved: list[Memory],
+    recent_conversations: list[Memory] | None = None,
+    similar_conversations: list[Memory] | None = None,
+) -> LLMResult:
     model = require("MEMORI_LLM_MODEL")
     reasoning_effort = require("MEMORI_REASONING_EFFORT")
 
-    if retrieved:
-        user_message = (
-            f"<relevant_memories>\n{_format_injected(retrieved)}\n</relevant_memories>\n\n"
-            f"{user_content}"
+    blocks: list[str] = []
+    if recent_conversations:
+        blocks.append(
+            _wrap("recent_conversations", _format_conversations(recent_conversations))
         )
-    else:
-        user_message = user_content
+    if similar_conversations:
+        blocks.append(
+            _wrap("similar_conversations", _format_conversations(similar_conversations))
+        )
+    if retrieved:
+        blocks.append(_wrap("relevant_memories", _format_injected(retrieved)))
+    user_message = "\n\n".join([*blocks, user_content]) if blocks else user_content
 
     request_body: dict[str, Any] = {
         "model": model,
@@ -177,3 +197,33 @@ def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
         user_message=user_message,
         assistant_message=assistant_message,
     )
+
+
+_SUMMARY_PROMPT = (
+    'Return JSON of shape {"summary": "<one or two sentences>"}. Write the summary '
+    "in the third person, focusing on what the user wanted and what was decided. "
+    "Skip greetings and small talk."
+)
+
+
+def summarize_session(turns: list[dict[str, str]]) -> str:
+    if not turns:
+        return ""
+    convo = "\n".join(f"{t.get('role', '')}: {t.get('content', '')}" for t in turns)
+    body = OpenRouterClient().chat_completions(
+        {
+            "model": require("MEMORI_LLM_MODEL"),
+            "messages": [
+                {"role": "system", "content": _SUMMARY_PROMPT},
+                {"role": "user", "content": convo},
+            ],
+            "response_format": {"type": "json_object"},
+        }
+    )
+    content = ""
+    for choice in body.get("choices", []):
+        content = (choice.get("message") or {}).get("content") or ""
+    try:
+        return str(json.loads(content).get("summary", "")).strip()
+    except json.JSONDecodeError:
+        return ""
