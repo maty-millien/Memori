@@ -7,9 +7,6 @@ from core.env import require
 from core.store import Memory, MemoryStore, Scope
 
 
-__all__ = ["Memory", "MemoryEngine", "Retrieved", "Scope"]
-
-
 @dataclass
 class Retrieved:
     memory: Memory
@@ -20,16 +17,8 @@ class Retrieved:
 class MemoryEngine:
     def __init__(self, path: str | None = None) -> None:
         self._store = MemoryStore(path=path)
-        existing_n = [
-            int(m.id.rsplit("_", 1)[-1])
-            for m in self._store.all()
-            if m.id.startswith("mem_auto_") and m.id.rsplit("_", 1)[-1].isdigit()
-        ]
+        existing_n = [int(m.id) for m in self._store.all() if m.id.isdigit()]
         self._auto_id = count(max(existing_n, default=0) + 1)
-
-    def seed(self, memories: list[Memory]) -> None:
-        self._store.clear()
-        self._store.upsert(memories)
 
     def retrieve(self, query: str, top_k: int) -> list[Retrieved]:
         min_score = float(require("MEMORI_RETRIEVAL_MIN_SCORE"))
@@ -54,22 +43,24 @@ class MemoryEngine:
             )
         return out
 
-    def write(self, content: str, scope: Scope = "topical") -> Memory:
-        memory = Memory(
-            id=f"mem_auto_{next(self._auto_id)}", content=content, scope=scope
-        )
-        self._store.upsert([memory])
-        return memory
-
-    def update(self, memory_id: str, content: str) -> Memory:
-        memory = Memory(
-            id=memory_id, content=content, scope=self._store.scope_of(memory_id)
-        )
-        self._store.upsert([memory])
-        return memory
+    def upsert(
+        self,
+        content: str,
+        scope: Scope,
+        memory_id: str | None = None,
+    ) -> None:
+        if memory_id is None:
+            memory_id = f"{next(self._auto_id)}"
+        else:
+            scope = self._store.scope_of(memory_id)
+        self._store.upsert([Memory(id=memory_id, content=content, scope=scope)])
 
     def delete(self, memory_id: str) -> None:
         self._store.delete([memory_id])
 
-    def snapshot(self) -> list[Memory]:
+    def all(self) -> list[Memory]:
         return self._store.all()
+
+    def reset(self, memories: list[Memory]) -> None:
+        self._store.clear()
+        self._store.upsert(memories)

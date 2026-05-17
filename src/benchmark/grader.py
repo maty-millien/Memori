@@ -52,7 +52,7 @@ def _log_initial_memories(log: LogFn, memories: list[dict[str, Any]]) -> None:
 
 
 def _log_snapshot(log: LogFn, engine: MemoryEngine) -> None:
-    snap = engine.snapshot()
+    snap = engine.all()
     if not snap:
         log("Final memory state: (empty)")
         return
@@ -75,7 +75,7 @@ def grade_retrieval_injection(
     _log_header(log, scenario)
     initial_raw = scenario.get("initial_memories", []) or []
     _log_initial_memories(log, initial_raw)
-    engine.seed([_memory_from_dict(m) for m in initial_raw])
+    engine.reset([_memory_from_dict(m) for m in initial_raw])
 
     user_turns = [t for t in scenario.get("turns", []) if t.get("role") == "user"]
     query = user_turns[-1]["content"] if user_turns else ""
@@ -152,15 +152,11 @@ def _call_matches(actual: ToolCall, expected: dict[str, Any]) -> bool:
 
 def _apply_tool_call(call: ToolCall, engine: MemoryEngine) -> None:
     try:
-        if call.name == "memory.write":
-            engine.write(
-                call.arguments.get("content", ""),
-                cast(Scope, call.arguments.get("scope", "topical")),
-            )
-        elif call.name == "memory.update":
-            engine.update(
-                call.arguments.get("memory_id", ""),
-                call.arguments.get("content", ""),
+        if call.name in ("memory.write", "memory.update"):
+            engine.upsert(
+                content=call.arguments.get("content", ""),
+                scope=cast(Scope, call.arguments.get("scope", "topical")),
+                memory_id=call.arguments.get("memory_id") or None,
             )
         elif call.name == "memory.delete":
             engine.delete(call.arguments.get("memory_id", ""))
@@ -174,7 +170,7 @@ def grade_memory_tool_call(
     _log_header(log, scenario)
     initial_raw = scenario.get("initial_memories", []) or []
     _log_initial_memories(log, initial_raw)
-    engine.seed([_memory_from_dict(m) for m in initial_raw])
+    engine.reset([_memory_from_dict(m) for m in initial_raw])
 
     user_turns = [t for t in scenario.get("turns", []) if t.get("role") == "user"]
     if not user_turns:
@@ -235,7 +231,7 @@ def grade_memory_tool_call(
     failures = _check_tool_calls(result.tool_calls, expected)
     failures.extend(
         _check_count_spec(
-            len(engine.snapshot()),
+            len(engine.all()),
             expected.get("final_memory_count", {}) or {},
             "final",
         )
@@ -314,7 +310,7 @@ def grade_full_loop(
         if "initial_memories" in session:
             initial_raw = session.get("initial_memories", []) or []
             _log_initial_memories(log, initial_raw)
-            engine.seed([_memory_from_dict(m) for m in initial_raw])
+            engine.reset([_memory_from_dict(m) for m in initial_raw])
 
         user_turns = [
             t for t in session.get("turns", []) or [] if t.get("role") == "user"
@@ -383,7 +379,7 @@ def grade_full_loop(
         failures.extend(_check_tool_calls(result.tool_calls, expected, context))
         failures.extend(
             _check_count_spec(
-                len(engine.snapshot()),
+                len(engine.all()),
                 expected.get("final_memory_count", {}) or {},
                 f"{context} final",
             )
@@ -410,7 +406,7 @@ def grade_full_loop(
         log("Final state assertions")
         log("-" * 78)
         _log_snapshot(log, engine)
-        snapshot = engine.snapshot()
+        snapshot = engine.all()
         failures.extend(
             _check_count_spec(
                 len(snapshot),
