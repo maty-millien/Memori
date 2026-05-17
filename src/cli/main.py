@@ -79,6 +79,7 @@ def _chat(line: str, engine: MemoryEngine, turns: list[dict[str, Any]]) -> None:
         recent,
         similar,
         history=turns,
+        apply_tool_call=lambda c: _apply(c, engine),
         on_reasoning=on_reasoning,
         on_content=on_content,
         on_tool=on_tool,
@@ -90,9 +91,6 @@ def _chat(line: str, engine: MemoryEngine, turns: list[dict[str, Any]]) -> None:
         print()
     elif phase["v"] is None:
         print("(empty response)")
-
-    for c in result.tool_calls:
-        _apply(c, engine)
 
     turns.append({"role": "user", "content": line})
     turns.append(
