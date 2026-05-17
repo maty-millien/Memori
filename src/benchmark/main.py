@@ -43,12 +43,21 @@ def main() -> None:
 
         def _run(sc: dict) -> tuple[ScenarioResult, list[str]]:
             buf: list[str] = []
-            return grade(sc, MemoryEngine(), buf.append), buf
+            print(f"  … {sc.get('id', '<unknown>')}", flush=True)
+            result = grade(sc, MemoryEngine(), buf.append)
+            print(
+                f"[{_SYMBOLS[result.status]}] {result.scenario_id} ({result.scenario_type})",
+                flush=True,
+            )
+            for message in result.messages:
+                print(f"       {message}", flush=True)
+            return result, buf
 
         # First-init of chromadb.Client() races on tenant validation when
         # called concurrently from threads; do it once on the main thread.
         chromadb.Client()
-        with ThreadPoolExecutor() as ex:
+        print(f"Running {len(scenarios)} scenarios (concurrency=3)…", flush=True)
+        with ThreadPoolExecutor(max_workers=3) as ex:
             pairs = list(ex.map(_run, scenarios))
         for _, buf in pairs:
             for line in buf:
@@ -67,12 +76,8 @@ def main() -> None:
             f"**{passed} passed, {failed} failed, {skipped} skipped (of {len(results)})**"
         )
 
-    for r in results:
-        print(f"[{_SYMBOLS[r.status]}] {r.scenario_id} ({r.scenario_type})")
-        for message in r.messages:
-            print(f"       {message}")
     print(f"\n{passed} passed, {failed} failed, {skipped} skipped (of {len(results)})")
-    print(f"\nFull log: {log_path}")
+    print(f"Full log: {log_path}")
 
 
 if __name__ == "__main__":

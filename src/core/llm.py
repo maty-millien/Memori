@@ -112,7 +112,10 @@ Choosing the scope (only when creating a new memory with memory_upsert):
 
 
 def _format_injected(memories: list[Memory]) -> str:
-    return "\n".join(f"- id: {m.id}\n  content: {m.content}" for m in memories)
+    return "\n".join(f'- id: "{m.id}"\n  content: {m.content}' for m in memories)
+
+
+_MAX_ATTEMPTS = 3
 
 
 def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
@@ -127,38 +130,48 @@ def call_with_tools(user_content: str, retrieved: list[Memory]) -> LLMResult:
     else:
         user_message = user_content
 
-    body = OpenRouterClient().chat_completions(
-        {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
-            "tools": _TOOLS,
-            "reasoning": {"effort": reasoning_effort},
-        }
-    )
+    request_body: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
+        "tools": _TOOLS,
+        "reasoning": {"effort": reasoning_effort},
+    }
 
+    client = OpenRouterClient()
     calls: list[ToolCall] = []
     assistant_message: dict[str, Any] = {}
-    for choice in body.get("choices", []):
-        assistant_message = choice.get("message", {}) or {}
-        for raw in assistant_message.get("tool_calls") or []:
-            fn = raw.get("function", {})
-            raw_name = fn.get("name", "")
-            mapped = _TOOL_NAME_MAP.get(raw_name, raw_name)
-            args_field = fn.get("arguments", "{}")
-            try:
-                arguments = (
-                    json.loads(args_field)
-                    if isinstance(args_field, str)
-                    else args_field
+    for _ in range(_MAX_ATTEMPTS):
+        calls = []
+        assistant_message = {}
+        body = client.chat_completions(request_body)
+        for choice in body.get("choices", []):
+            assistant_message = choice.get("message", {}) or {}
+            for raw in assistant_message.get("tool_calls") or []:
+                fn = raw.get("function", {})
+                raw_name = fn.get("name", "")
+                mapped = _TOOL_NAME_MAP.get(raw_name, raw_name)
+                args_field = fn.get("arguments", "{}")
+                try:
+                    arguments = (
+                        json.loads(args_field)
+                        if isinstance(args_field, str)
+                        else args_field
+                    )
+                except json.JSONDecodeError:
+                    arguments = {}
+                calls.append(
+                    ToolCall(name=mapped, arguments=cast(dict[str, Any], arguments))
                 )
-            except json.JSONDecodeError:
-                arguments = {}
-            calls.append(
-                ToolCall(name=mapped, arguments=cast(dict[str, Any], arguments))
-            )
+        if (
+            calls
+            or assistant_message.get("content")
+            or assistant_message.get("reasoning")
+        ):
+            break
+
     return LLMResult(
         tool_calls=calls,
         user_message=user_message,
