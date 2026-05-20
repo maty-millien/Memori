@@ -25,7 +25,6 @@ from memori.benchmark.report import (
     noop,
 )
 from memori.domain.engine import Engine
-from memori.llm.apply import apply_tool_call
 from memori.llm.chat import chat
 from memori.llm.summarize import summarize_session
 
@@ -72,11 +71,8 @@ def grade_full_loop(
         recent, similar = engine.retrieve_conversations(user_content)
         log_memories(log, "Recent conversations (sent to LLM)", recent)
         log_memories(log, "Similar conversations (sent to LLM)", similar)
-        result = chat(user_content, injected_memories, recent, similar)
+        result = chat(user_content, injected_memories, recent, similar, engine=engine)
         assistant_content = log_llm_exchange(log, result)
-
-        for call in result.tool_calls:
-            apply_tool_call(call, engine)
 
         engine.record_summary(summarize_session(session.get("turns", []) or []))
 

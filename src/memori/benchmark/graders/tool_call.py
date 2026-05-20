@@ -21,7 +21,6 @@ from memori.benchmark.report import (
     noop,
 )
 from memori.domain.engine import Engine
-from memori.llm.apply import apply_tool_call
 from memori.llm.chat import chat
 
 
@@ -52,11 +51,8 @@ def grade_memory_tool_call(
     log_memories(log, "Recent conversations (sent to LLM)", recent)
     log_memories(log, "Similar conversations (sent to LLM)", similar)
 
-    result = chat(user_content, injected, recent, similar)
+    result = chat(user_content, injected, recent, similar, engine=engine)
     log_llm_exchange(log, result)
-
-    for call in result.tool_calls:
-        apply_tool_call(call, engine)
 
     log_snapshot(log, engine)
 

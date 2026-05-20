@@ -62,12 +62,14 @@ class Engine:
         content: str,
         scope: Scope,
         memory_id: str | None = None,
-    ) -> None:
+    ) -> tuple[str, bool]:
+        created = memory_id is None
         if memory_id is None:
             memory_id = f"{next(self._auto_id)}"
         else:
             scope = self._store.scope_of(memory_id)
         self._store.upsert([Memory(id=memory_id, content=content, scope=scope)])
+        return memory_id, created
 
     def delete(self, memory_id: str) -> None:
         self._store.delete([memory_id])
