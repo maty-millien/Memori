@@ -7,7 +7,7 @@ from pydantic_ai.messages import ModelMessage
 from pydantic_ai.usage import RunUsage
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.suggester import SuggestFromList
 from textual.widgets import Input, Static
 
@@ -100,6 +100,8 @@ class MemoriApp(App):
         padding: 0 2;
         margin: 0 1 1 1;
     }
+    #status-bar-left { width: 1fr; height: 1; content-align: left middle; }
+    #status-bar-right { width: 1fr; height: 1; content-align: right middle; }
     """
 
     BINDINGS = [
@@ -115,7 +117,6 @@ class MemoriApp(App):
         self.turns: list[ModelMessage] = []
         self._last_input_tokens = 0
         self._last_output_tokens = 0
-        self._total_cached_tokens = 0
         self._total_requests = 0
         self._total_tool_calls = 0
         self._turn_count = 0
@@ -124,13 +125,16 @@ class MemoriApp(App):
     def compose(self) -> ComposeResult:
         self.scroll = VerticalScroll(id="conversation")
         yield self.scroll
-        self.status_bar = Static("", id="status-bar")
+        self.status_left = Static("", id="status-bar-left")
+        self.status_right = Static("", id="status-bar-right")
         with Vertical(id="input-area"):
             yield Input(
                 placeholder="Ask Memori… (/help)",
                 suggester=SuggestFromList(COMMANDS, case_sensitive=False),
             )
-            yield self.status_bar
+            with Horizontal(id="status-bar"):
+                yield self.status_left
+                yield self.status_right
 
     def on_mount(self) -> None:
         self.title = "Memori"
@@ -139,25 +143,23 @@ class MemoriApp(App):
 
     def _render_status(self) -> None:
         total = self._last_input_tokens + self._last_output_tokens
-        parts = [
+        left = [
             f"⏎ {self._turn_count} turns",
             f"Σ {total:,} tok",
-            f"↑ {self._last_input_tokens:,} in",
-            f"↓ {self._last_output_tokens:,} out",
         ]
-        if self._total_cached_tokens:
-            parts.append(f"⚡ {self._total_cached_tokens:,} cached")
-        parts.append(f"⚙ {self._total_tool_calls} tools")
-        parts.append(f"⇄ {self._total_requests} req")
+        right = [
+            f"⚙ {self._total_tool_calls} tools",
+            f"⇄ {self._total_requests} req",
+        ]
         if self._last_elapsed:
-            parts.append(f"⏱ {self._last_elapsed:.1f}s")
-        self.status_bar.update(" · ".join(parts))
+            right.append(f"⏱ {self._last_elapsed:.1f}s")
+        self.status_left.update(" · ".join(left))
+        self.status_right.update(" · ".join(right))
 
     def record_turn_metrics(self, usage: RunUsage, elapsed: float) -> None:
         self._turn_count += 1
         self._last_input_tokens = int(usage.input_tokens or 0)
         self._last_output_tokens = int(usage.output_tokens or 0)
-        self._total_cached_tokens += int(usage.cache_read_tokens or 0)
         self._total_requests += int(usage.requests or 0)
         self._total_tool_calls += int(usage.tool_calls or 0)
         self._last_elapsed = elapsed
@@ -236,7 +238,6 @@ class MemoriApp(App):
         self.scroll.remove_children()
         self._last_input_tokens = 0
         self._last_output_tokens = 0
-        self._total_cached_tokens = 0
         self._total_requests = 0
         self._total_tool_calls = 0
         self._turn_count = 0
