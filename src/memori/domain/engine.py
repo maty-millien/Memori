@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from itertools import count
 
-from core.store import Memory, MemoryStore, Scope
+from memori.domain.memory import Memory, Retrieved, Scope
+from memori.infra.store import Store
 
 
 RETRIEVAL_TOP_K = 10
@@ -11,16 +11,9 @@ RECENT_CONVERSATIONS = 5
 SIMILAR_CONVERSATIONS = 5
 
 
-@dataclass
-class Retrieved:
-    memory: Memory
-    score: float
-    reason: str
-
-
-class MemoryEngine:
+class Engine:
     def __init__(self, path: str | None = None) -> None:
-        self._store = MemoryStore(path=path)
+        self._store = Store(path=path)
         existing_n = [int(m.id) for m in self._store.all() if m.id.isdigit()]
         self._auto_id = count(max(existing_n, default=0) + 1)
 
@@ -58,10 +51,7 @@ class MemoryEngine:
         ]
         return recent, similar
 
-    def record_conversation_summary(self, turns: list[dict[str, str]]) -> None:
-        from core.llm import summarize_session
-
-        summary = summarize_session(turns)
+    def record_summary(self, summary: str) -> None:
         if not summary:
             return
         memory_id = f"{next(self._auto_id)}"
@@ -82,7 +72,7 @@ class MemoryEngine:
     def delete(self, memory_id: str) -> None:
         self._store.delete([memory_id])
 
-    def get_all_memories(self) -> list[Memory]:
+    def memories(self) -> list[Memory]:
         return self._store.all(kind="memory")
 
     def reset(self, memories: list[Memory]) -> None:

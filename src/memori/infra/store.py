@@ -2,32 +2,17 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Literal, cast
+from datetime import datetime
+from typing import Any, cast
 
 import chromadb
 
-from core.env import require
-from core.openrouter import OpenRouterClient
+from memori.domain.memory import Kind, Memory, Scope, utc_now
+from memori.infra.env import require
+from memori.infra.openrouter import OpenRouterClient
 
 
 Embedding = Sequence[float] | Sequence[int]
-Scope = Literal["global", "topical"]
-Kind = Literal["memory", "conversation"]
-
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-@dataclass
-class Memory:
-    id: str
-    content: str
-    scope: Scope = "topical"
-    kind: Kind = "memory"
-    created_at: datetime = field(default_factory=_now)
 
 
 def _embed(texts: list[str]) -> list[Embedding]:
@@ -43,11 +28,11 @@ def _to_memory(mid: str, doc: str, meta: Mapping[str, Any] | None) -> Memory:
         content=doc,
         scope=cast(Scope, m.get("scope", "topical")),
         kind=cast(Kind, m.get("kind", "memory")),
-        created_at=datetime.fromisoformat(ts) if isinstance(ts, str) else _now(),
+        created_at=datetime.fromisoformat(ts) if isinstance(ts, str) else utc_now(),
     )
 
 
-class MemoryStore:
+class Store:
     def __init__(self, path: str | None = None) -> None:
         client = chromadb.PersistentClient(path=path) if path else chromadb.Client()
         name = "memori" if path else f"memori_{uuid.uuid4().hex}"

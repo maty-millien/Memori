@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from core.env import require
-from core.openrouter import OpenRouterClient
+from memori.infra.env import require
+from memori.infra.openrouter import OpenRouterClient
 
 
 _JUDGE_PROMPT = """You are a strict evaluator. Given an assistant's answer and a trait that should hold true about that answer, decide whether it holds.

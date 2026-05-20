@@ -6,7 +6,7 @@ from typing import Any
 import yaml
 
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
+ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_BENCHMARK_DIR = ROOT_DIR / "benchmarks"
 
 

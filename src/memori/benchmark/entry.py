@@ -7,9 +7,10 @@ from pathlib import Path
 import chromadb
 from dotenv import load_dotenv
 
-from benchmark.grader import ScenarioResult, grade
-from benchmark.loader import load_scenarios
-from core.engine import MemoryEngine
+from memori.benchmark.graders.common import ScenarioResult
+from memori.benchmark.graders.registry import grade
+from memori.benchmark.loader import load_scenarios
+from memori.domain.engine import Engine
 
 
 _SYMBOLS = {"passed": "PASS", "failed": "FAIL", "skipped": "SKIP"}
@@ -44,7 +45,7 @@ def main() -> None:
         def _run(sc: dict) -> tuple[ScenarioResult, list[str]]:
             buf: list[str] = []
             print(f"  … {sc.get('id', '<unknown>')}", flush=True)
-            result = grade(sc, MemoryEngine(), buf.append)
+            result = grade(sc, Engine(), buf.append)
             print(
                 f"[{_SYMBOLS[result.status]}] {result.scenario_id} ({result.scenario_type})",
                 flush=True,

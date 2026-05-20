@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from core.env import require
+from memori.infra.env import require
 
 
 _BASE_URL = "https://openrouter.ai/api/v1"
