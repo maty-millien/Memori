@@ -10,12 +10,14 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     ModelMessage,
+    ModelRequest,
     PartDeltaEvent,
     PartStartEvent,
     TextPart,
     TextPartDelta,
     ThinkingPart,
     ThinkingPartDelta,
+    UserPromptPart,
 )
 from pydantic_ai.usage import RunUsage
 
@@ -38,6 +40,17 @@ class LLMResult:
 
 def _noop(_: str) -> None:
     return None
+
+
+def _strip_context_from_history(
+    new_messages: list[ModelMessage], raw_user_content: str
+) -> None:
+    for msg in new_messages:
+        if isinstance(msg, ModelRequest):
+            for part in msg.parts:
+                if isinstance(part, UserPromptPart) and isinstance(part.content, str):
+                    part.content = raw_user_content
+                    return
 
 
 _agent: Agent[Deps, str] | None = None
@@ -68,6 +81,7 @@ def chat(
         model_settings=model_settings(),
     )
     new_messages = list(result.new_messages())
+    _strip_context_from_history(new_messages, user_content)
     return LLMResult(
         tool_calls=extract_tool_calls(new_messages),
         user_message=user_message,
@@ -168,6 +182,7 @@ def stream_chat(
             on_tool,
         )
     )
+    _strip_context_from_history(new_messages, user_content)
     return LLMResult(
         tool_calls=extract_tool_calls(new_messages),
         user_message=user_message,
