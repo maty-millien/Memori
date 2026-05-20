@@ -1,0 +1,22 @@
+id: 02_ignore_transient_noise
+description: Does not save temporary small-talk or current activity.
+type: memory_loop
+sessions:
+  - id: ignore_noise
+    record_summary: false
+    turns:
+      - role: user
+        content: I just opened my terminal, poured coffee, and put on a playlist.
+    expected:
+      forbidden_tool_calls:
+        - name: memory.upsert
+      final_memory_count:
+        min: 0
+        max: 0
+      final_memories:
+        should_not_match:
+          - regex: (?i)\b(terminal|coffee|playlist)\b
+final_state:
+  final_memory_count:
+    min: 0
+    max: 0

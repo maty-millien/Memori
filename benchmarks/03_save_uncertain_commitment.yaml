@@ -1,0 +1,27 @@
+id: 03_save_uncertain_commitment
+description: Saves an uncertain but useful future commitment while preserving uncertainty.
+type: memory_loop
+sessions:
+  - id: save_uncertain_deadline
+    record_summary: false
+    turns:
+      - role: user
+        content: I think the product demo might be next Friday, but it is not confirmed.
+    expected:
+      tool_calls:
+        - name: memory.upsert
+          arguments:
+            memory_id: null
+            content_regex: (?i)(?=.*\b(product demo|demo)\b)(?=.*\bFriday\b)(?=.*\b(might|uncertain|not confirmed|not sure|possibly|tentative)\b)
+      forbidden_tool_calls:
+        - name: memory.delete
+      final_memory_count:
+        min: 1
+        max: 1
+      final_memories:
+        should_match:
+          - regex: (?i)(?=.*\b(product demo|demo)\b)(?=.*\bFriday\b)
+final_state:
+  final_memory_count:
+    min: 1
+    max: 1

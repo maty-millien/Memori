@@ -1,3 +1,11 @@
 [dependency-groups]
-app = ["PyYAML", "chromadb", "httpx", "pydantic-ai-slim[openai]", "python-dotenv", "textual"]
+app = [
+    "PyYAML",
+    "chromadb",
+    "httpx",
+    "pydantic",
+    "pydantic-ai-slim[openai]",
+    "python-dotenv",
+    "textual",
+]
 dev = ["mypy", "ruff", "types-PyYAML"]

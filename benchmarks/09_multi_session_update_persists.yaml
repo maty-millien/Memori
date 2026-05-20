@@ -1,0 +1,71 @@
+id: 09_multi_session_update_persists
+description: Creates a travel memory, updates it later, and retrieves the updated state.
+type: memory_loop
+sessions:
+  - id: create_trip
+    record_summary: false
+    turns:
+      - role: user
+        content: I am planning a Tokyo trip in June and prefer budget hostels.
+    expected:
+      tool_calls:
+        - name: memory.upsert
+          arguments:
+            memory_id: null
+            content_regex: (?i)(?=.*\bTokyo\b)(?=.*\bJune\b)
+      final_memory_count:
+        min: 1
+        max: 2
+  - id: update_trip
+    record_summary: false
+    turns:
+      - role: user
+        content: The Tokyo trip changed. It is now in October instead of June.
+    expected:
+      retrieved:
+        content:
+          should_match:
+            - regex: (?i)\bTokyo\b
+      tool_calls:
+        - name: memory.upsert
+          arguments:
+            memory_id_regex: .+
+            content_regex: (?i)(?=.*\bTokyo\b)(?=.*\bOctober\b)
+      forbidden_tool_calls:
+        - name: memory.upsert
+          arguments:
+            memory_id: null
+            content_regex: (?i)\bTokyo\b
+      final_memory_count:
+        min: 1
+        max: 2
+  - id: retrieve_updated_trip
+    record_summary: false
+    turns:
+      - role: user
+        content: What should I prepare for my upcoming trip?
+    expected:
+      retrieved:
+        content:
+          should_match:
+            - regex: (?i)\bTokyo\b
+            - regex: (?i)\bOctober\b
+      answer:
+        should_match:
+          - regex: (?i)\bTokyo\b
+          - regex: (?i)\bOctober\b
+      forbidden_tool_calls:
+        - name: memory.upsert
+          arguments:
+            memory_id: null
+            content_regex: (?i)\bTokyo\b
+final_state:
+  final_memory_count:
+    min: 1
+    max: 2
+  final_memories:
+    should_match:
+      - regex: (?i)\bTokyo\b
+      - regex: (?i)\bOctober\b
+    should_not_match:
+      - regex: (?i)\bTokyo\b.*\bJune\b

@@ -1,0 +1,27 @@
+id: 11_answer_uses_retrieved_preference
+description: Uses retrieved code-language preference in the assistant answer.
+type: memory_loop
+sessions:
+  - id: code_answer
+    record_summary: false
+    initial_memories:
+      - id: mem_code_language
+        content: User prefers TypeScript instead of JavaScript for code examples.
+        scope: global
+    turns:
+      - role: user
+        content: Show a tiny function that adds two numbers.
+    expected:
+      retrieved:
+        include_ids:
+          - mem_code_language
+      answer:
+        should_match:
+          - regex: (?i)\b(TypeScript|number)\b
+        should_not_match:
+          - regex: (?i)\bJavaScript\b
+      forbidden_tool_calls:
+        - name: memory.upsert
+      final_memory_count:
+        min: 1
+        max: 1

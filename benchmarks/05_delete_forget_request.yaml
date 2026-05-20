@@ -1,0 +1,28 @@
+id: 05_delete_forget_request
+description: Deletes the matching memory when the user asks to forget it.
+type: memory_loop
+sessions:
+  - id: forget_request
+    record_summary: false
+    initial_memories:
+      - id: mem_running
+        content: User prefers running workouts in the morning.
+    turns:
+      - role: user
+        content: Forget what I said about preferring morning runs.
+    expected:
+      retrieved:
+        include_ids:
+          - mem_running
+      tool_calls:
+        - name: memory.delete
+          arguments:
+            memory_id: mem_running
+      forbidden_tool_calls:
+        - name: memory.upsert
+      final_memory_count:
+        min: 0
+        max: 0
+      final_memories:
+        should_not_match:
+          - regex: (?i)\b(morning runs?|running workouts)\b

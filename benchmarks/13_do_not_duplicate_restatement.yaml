@@ -1,0 +1,22 @@
+id: 13_do_not_duplicate_restatement
+description: Does not create a new memory when the user merely restates an existing one.
+type: memory_loop
+sessions:
+  - id: restatement
+    record_summary: false
+    initial_memories:
+      - id: mem_concise
+        content: User prefers concise answers.
+        scope: global
+    turns:
+      - role: user
+        content: As a reminder, I like concise answers.
+    expected:
+      retrieved:
+        include_ids:
+          - mem_concise
+      forbidden_tool_calls:
+        - name: memory.upsert
+      final_memory_count:
+        min: 1
+        max: 1

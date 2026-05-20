@@ -1,0 +1,32 @@
+id: 04_update_existing_preference
+description: Updates a contradicted memory instead of creating a duplicate.
+type: memory_loop
+sessions:
+  - id: update_existing
+    record_summary: false
+    initial_memories:
+      - id: mem_report_style
+        content: User prefers very detailed technical reports with lots of explanation.
+    turns:
+      - role: user
+        content: Actually, for technical reports I now want short, clear, results-oriented summaries.
+    expected:
+      retrieved:
+        include_ids:
+          - mem_report_style
+      tool_calls:
+        - name: memory.upsert
+          arguments:
+            memory_id: mem_report_style
+            content_regex: (?i)(?=.*\btechnical reports?\b)(?=.*\b(short|concise|brief)\b)(?=.*\b(clear|results?-oriented|summaries)\b)
+      forbidden_tool_calls:
+        - name: memory.upsert
+          arguments:
+            memory_id: null
+            content_regex: (?i)\btechnical reports?\b
+      final_memory_count:
+        min: 1
+        max: 1
+      final_memories:
+        should_match:
+          - regex: (?i)(?=.*\btechnical reports?\b)(?=.*\b(short|concise|brief|clear|results?)\b)

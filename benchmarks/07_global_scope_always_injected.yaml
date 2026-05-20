@@ -1,0 +1,28 @@
+id: 07_global_scope_always_injected
+description: Injects global preferences even when the topic is unrelated.
+type: memory_loop
+sessions:
+  - id: unrelated_topic
+    record_summary: false
+    initial_memories:
+      - id: mem_reply_style
+        content: User prefers concise answers with concrete next steps.
+        scope: global
+      - id: mem_baking
+        content: User is testing a sourdough recipe this weekend.
+    turns:
+      - role: user
+        content: What is a clean way to name a git branch for a bug fix?
+    expected:
+      retrieved:
+        include_ids:
+          - mem_reply_style
+        max_count: 3
+      forbidden_tool_calls:
+        - name: memory.upsert
+      answer:
+        should_match:
+          - regex: (?i)\b(branch|bug|fix)\b
+      final_memory_count:
+        min: 2
+        max: 2
