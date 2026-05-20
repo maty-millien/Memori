@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic_ai import Agent
@@ -16,6 +17,7 @@ from pydantic_ai.messages import (
     ThinkingPart,
     ThinkingPartDelta,
 )
+from pydantic_ai.usage import RunUsage
 
 from memori.domain.engine import Engine
 from memori.domain.memory import Memory
@@ -30,6 +32,8 @@ class LLMResult:
     user_message: str
     assistant_message: dict[str, Any]
     new_messages: list[ModelMessage]
+    usage: RunUsage = field(default_factory=RunUsage)
+    elapsed: float = 0.0
 
 
 def _noop(_: str) -> None:
@@ -79,10 +83,11 @@ async def _stream_async(
     on_reasoning: Callable[[str], None],
     on_content: Callable[[str], None],
     on_tool: Callable[[str, dict[str, Any]], None],
-) -> tuple[list[ModelMessage], str, str]:
+) -> tuple[list[ModelMessage], str, str, RunUsage]:
     agent = _get_agent()
     final_content, final_reasoning = "", ""
     new_messages: list[ModelMessage] = []
+    usage = RunUsage()
 
     async with agent.iter(
         user_message,
@@ -130,8 +135,12 @@ async def _stream_async(
 
         if run.result is not None:
             new_messages = list(run.result.new_messages())
+            try:
+                usage = run.result.usage()
+            except Exception:
+                pass
 
-    return new_messages, final_content, final_reasoning
+    return new_messages, final_content, final_reasoning, usage
 
 
 def stream_chat(
@@ -148,7 +157,8 @@ def stream_chat(
     user_message = build_user_message(
         user_content, retrieved, recent_conversations, similar_conversations
     )
-    new_messages, content, reasoning = asyncio.run(
+    start = time.monotonic()
+    new_messages, content, reasoning, usage = asyncio.run(
         _stream_async(
             user_message,
             history or [],
@@ -163,4 +173,6 @@ def stream_chat(
         user_message=user_message,
         assistant_message={"content": content, "reasoning": reasoning},
         new_messages=new_messages,
+        usage=usage,
+        elapsed=time.monotonic() - start,
     )

@@ -41,3 +41,5 @@ def run_chat(
         on_tool=_on_tool,
     )
     history.extend(result.new_messages)
+    if hasattr(app, "record_turn_metrics"):
+        app.call_from_thread(app.record_turn_metrics, result.usage, result.elapsed)

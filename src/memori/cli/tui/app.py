@@ -4,9 +4,10 @@ import asyncio
 
 from dotenv import load_dotenv
 from pydantic_ai.messages import ModelMessage
+from pydantic_ai.usage import RunUsage
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import VerticalScroll
+from textual.containers import Vertical, VerticalScroll
 from textual.suggester import SuggestFromList
 from textual.widgets import Input, Static
 
@@ -78,16 +79,27 @@ class MemoriApp(App):
     MarkdownParagraph { margin: 0; padding: 0; }
     MarkdownFence, MarkdownCode { background: ansi_default; color: ansi_bright_magenta; }
     MarkdownH1, MarkdownH2, MarkdownH3 { color: ansi_bright_blue; text-style: bold; }
-    Input {
+    #input-area {
         dock: bottom;
+        height: auto;
+        background: ansi_default;
+    }
+    Input {
         background: ansi_default;
         color: ansi_default;
         border: round ansi_bright_black;
         padding: 0 1;
-        margin: 0 1 1 1;
+        margin: 0 1 0 1;
     }
     Input:focus { border: round ansi_default; }
     Input > .input--suggestion { color: ansi_bright_black; }
+    #status-bar {
+        height: 1;
+        background: ansi_default;
+        color: ansi_bright_black;
+        padding: 0 2;
+        margin: 0 1 1 1;
+    }
     """
 
     BINDINGS = [
@@ -101,18 +113,55 @@ class MemoriApp(App):
         load_dotenv()
         self.engine = Engine(path=DB_PATH)
         self.turns: list[ModelMessage] = []
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+        self._total_cached_tokens = 0
+        self._total_requests = 0
+        self._total_tool_calls = 0
+        self._turn_count = 0
+        self._last_elapsed = 0.0
 
     def compose(self) -> ComposeResult:
         self.scroll = VerticalScroll(id="conversation")
         yield self.scroll
-        yield Input(
-            placeholder="Ask Memori… (/help)",
-            suggester=SuggestFromList(COMMANDS, case_sensitive=False),
-        )
+        self.status_bar = Static("", id="status-bar")
+        with Vertical(id="input-area"):
+            yield Input(
+                placeholder="Ask Memori… (/help)",
+                suggester=SuggestFromList(COMMANDS, case_sensitive=False),
+            )
+            yield self.status_bar
 
     def on_mount(self) -> None:
         self.title = "Memori"
         self.query_one(Input).focus()
+        self._render_status()
+
+    def _render_status(self) -> None:
+        total = self._total_input_tokens + self._total_output_tokens
+        parts = [
+            f"⏎ {self._turn_count} turns",
+            f"↑ {self._total_input_tokens:,} in",
+            f"↓ {self._total_output_tokens:,} out",
+            f"Σ {total:,} tok",
+        ]
+        if self._total_cached_tokens:
+            parts.append(f"⚡ {self._total_cached_tokens:,} cached")
+        parts.append(f"⚙ {self._total_tool_calls} tools")
+        parts.append(f"⇄ {self._total_requests} req")
+        if self._last_elapsed:
+            parts.append(f"⏱ {self._last_elapsed:.1f}s")
+        self.status_bar.update(" · ".join(parts))
+
+    def record_turn_metrics(self, usage: RunUsage, elapsed: float) -> None:
+        self._turn_count += 1
+        self._total_input_tokens += int(usage.input_tokens or 0)
+        self._total_output_tokens += int(usage.output_tokens or 0)
+        self._total_cached_tokens += int(usage.cache_read_tokens or 0)
+        self._total_requests += int(usage.requests or 0)
+        self._total_tool_calls += int(usage.tool_calls or 0)
+        self._last_elapsed = elapsed
+        self._render_status()
 
     async def _say(self, text: str) -> None:
         await self.scroll.mount(UserTurn(text))
@@ -185,6 +234,14 @@ class MemoriApp(App):
     async def action_new_session(self) -> None:
         await self._save_session_with_indicator(None)
         self.scroll.remove_children()
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+        self._total_cached_tokens = 0
+        self._total_requests = 0
+        self._total_tool_calls = 0
+        self._turn_count = 0
+        self._last_elapsed = 0.0
+        self._render_status()
 
     def action_clear(self) -> None:
         self.scroll.remove_children()
