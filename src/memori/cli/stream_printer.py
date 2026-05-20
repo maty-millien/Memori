@@ -1,45 +1,48 @@
 from __future__ import annotations
 
-_DIM = "\033[2m"
-_DIM_ITALIC = "\033[2;3m"
-_RESET = "\033[0m"
+from rich.console import Console, Group
+from rich.live import Live
+from rich.markdown import Markdown
+from rich.text import Text
 
 
 class StreamPrinter:
-    def __init__(self) -> None:
-        self.phase: str | None = None
+    def __init__(self, console: Console) -> None:
+        self.console = console
+        self.reasoning = ""
+        self.content = ""
+        self.tools: list[str] = []
+        self.live = Live(
+            self._render(),
+            console=console,
+            refresh_per_second=20,
+            transient=False,
+        )
+        self.live.start()
 
-    def _switch(self, target: str) -> None:
-        if self.phase == target:
-            return
-        if self.phase == "reasoning":
-            print(_RESET, end="", flush=True)
-        if self.phase is not None:
-            print()
-        if target == "reasoning":
-            print(_DIM_ITALIC, end="", flush=True)
-        self.phase = target
+    def _render(self) -> Group:
+        parts: list = []
+        for name in self.tools:
+            parts.append(Text(f"· {name}", style="dim"))
+        if self.reasoning:
+            parts.append(Text(self.reasoning, style="dim italic"))
+        if self.content:
+            parts.append(Markdown(self.content))
+        return Group(*parts)
 
     def on_reasoning(self, s: str) -> None:
-        self._switch("reasoning")
-        print(s, end="", flush=True)
+        self.reasoning += s
+        self.live.update(self._render())
 
     def on_content(self, s: str) -> None:
-        self._switch("content")
-        print(s, end="", flush=True)
+        self.content += s
+        self.live.update(self._render())
 
     def on_tool(self, name: str) -> None:
-        if self.phase == "reasoning":
-            print(_RESET, end="", flush=True)
-        if self.phase is not None:
-            print()
-        print(f"{_DIM}· {name}{_RESET}", flush=True)
-        self.phase = "tool"
+        self.tools.append(name)
+        self.live.update(self._render())
 
     def finalize(self) -> None:
-        if self.phase == "reasoning":
-            print(_RESET)
-        elif self.phase == "content":
-            print()
-        elif self.phase is None:
-            print("(empty response)")
+        if not (self.reasoning or self.content or self.tools):
+            self.console.print("[dim](empty response)[/dim]")
+        self.live.stop()
