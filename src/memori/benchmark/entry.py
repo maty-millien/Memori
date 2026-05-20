@@ -18,7 +18,7 @@ def main() -> None:
     RUNS_DIR.mkdir(exist_ok=True)
 
     scenarios = load_scenarios()
-    print(f"Running {len(scenarios)} benchmark scenarios (synchronous)")
+    print(f"Running {len(scenarios)} benchmark scenarios (process-parallel)")
     result = run_suite(scenarios, progress=lambda line: print(line, flush=True))
 
     path = RUNS_DIR / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
