@@ -64,9 +64,15 @@ class AssistantTurn(Vertical):
 
 def _format_tool_inner(name: str, args: dict[str, Any]) -> str:
     if not args:
-        return f"{name}()"
-    pieces = [f"{key}={_format_value(value)}" for key, value in args.items()]
-    return f"{name}({', '.join(pieces)})"
+        return name
+    items = list(args.items())
+    primary_key, primary_value = items[0]
+    head = f"{name} {_format_value(primary_value)}"
+    rest = items[1:]
+    if not rest:
+        return head
+    tail = ", ".join(f"{key} {_format_value(value)}" for key, value in rest)
+    return f"{head}  ({tail})"
 
 
 def _format_value(value: Any) -> str:

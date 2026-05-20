@@ -59,7 +59,7 @@ class MemoriApp(App):
         background: ansi_default;
         border-left: outer ansi_magenta;
         padding: 0 0 0 1;
-        margin: 1 0;
+        margin: 0;
     }
     .assistant-turn {
         padding-bottom: 1;
@@ -172,7 +172,7 @@ class MemoriApp(App):
     async def _save_session_with_indicator(self, done_text: str | None) -> None:
         if not self.turns:
             return
-        indicator = Static("○ Summarizing conversation…", classes="summarize")
+        indicator = Static("⚡ Summarizing conversation…", classes="summarize")
         await self.scroll.mount(indicator)
         self.scroll.scroll_end(animate=False)
         try:
