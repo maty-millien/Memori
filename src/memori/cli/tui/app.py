@@ -113,8 +113,8 @@ class MemoriApp(App):
         load_dotenv()
         self.engine = Engine(path=DB_PATH)
         self.turns: list[ModelMessage] = []
-        self._total_input_tokens = 0
-        self._total_output_tokens = 0
+        self._last_input_tokens = 0
+        self._last_output_tokens = 0
         self._total_cached_tokens = 0
         self._total_requests = 0
         self._total_tool_calls = 0
@@ -138,12 +138,12 @@ class MemoriApp(App):
         self._render_status()
 
     def _render_status(self) -> None:
-        total = self._total_input_tokens + self._total_output_tokens
+        total = self._last_input_tokens + self._last_output_tokens
         parts = [
             f"⏎ {self._turn_count} turns",
-            f"↑ {self._total_input_tokens:,} in",
-            f"↓ {self._total_output_tokens:,} out",
             f"Σ {total:,} tok",
+            f"↑ {self._last_input_tokens:,} in",
+            f"↓ {self._last_output_tokens:,} out",
         ]
         if self._total_cached_tokens:
             parts.append(f"⚡ {self._total_cached_tokens:,} cached")
@@ -155,8 +155,8 @@ class MemoriApp(App):
 
     def record_turn_metrics(self, usage: RunUsage, elapsed: float) -> None:
         self._turn_count += 1
-        self._total_input_tokens += int(usage.input_tokens or 0)
-        self._total_output_tokens += int(usage.output_tokens or 0)
+        self._last_input_tokens = int(usage.input_tokens or 0)
+        self._last_output_tokens = int(usage.output_tokens or 0)
         self._total_cached_tokens += int(usage.cache_read_tokens or 0)
         self._total_requests += int(usage.requests or 0)
         self._total_tool_calls += int(usage.tool_calls or 0)
@@ -234,8 +234,8 @@ class MemoriApp(App):
     async def action_new_session(self) -> None:
         await self._save_session_with_indicator(None)
         self.scroll.remove_children()
-        self._total_input_tokens = 0
-        self._total_output_tokens = 0
+        self._last_input_tokens = 0
+        self._last_output_tokens = 0
         self._total_cached_tokens = 0
         self._total_requests = 0
         self._total_tool_calls = 0
