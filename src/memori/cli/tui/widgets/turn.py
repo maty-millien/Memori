@@ -11,6 +11,11 @@ class UserTurn(Static):
         super().__init__(f"› {text}", classes="user-turn")
 
 
+class SystemTurn(Static):
+    def __init__(self, text: str) -> None:
+        super().__init__(f"• {text}", classes="system-turn")
+
+
 class AssistantTurn(Vertical):
     def __init__(self) -> None:
         super().__init__(classes="assistant-turn")
@@ -21,7 +26,7 @@ class AssistantTurn(Vertical):
         self._content_buf = ""
 
     def _ensure_reasoning(self) -> None:
-        if self._reasoning_widget is None or self._last_kind == "content":
+        if self._reasoning_widget is None or self._last_kind != "reasoning":
             self._reasoning_buf = ""
             self._reasoning_widget = Static("", classes="reasoning")
             self.mount(self._reasoning_widget)
@@ -46,20 +51,9 @@ class AssistantTurn(Vertical):
         self._scroll_end()
 
     def append_tool(self, name: str, args: dict[str, Any]) -> None:
-        self._ensure_reasoning()
-        buf = self._reasoning_buf
-        if not buf:
-            prefix = ""
-        elif buf.endswith("\n\n"):
-            prefix = ""
-        elif buf.endswith("\n"):
-            prefix = "\n"
-        else:
-            prefix = "\n\n"
-        self._reasoning_buf += f"{prefix}⚡ {_format_tool_inner(name, args)}\n\n"
-        assert self._reasoning_widget is not None
-        self._reasoning_widget.update(self._reasoning_buf)
+        self.mount(Static(f"⚡ {_format_tool_inner(name, args)}", classes="tool-call"))
         self._last_kind = "tool"
+        self._reasoning_widget = None
         self._scroll_end()
 
     def _scroll_end(self) -> None:
