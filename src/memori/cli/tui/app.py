@@ -8,7 +8,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.suggester import SuggestFromList
-from textual.widgets import Input
+from textual.widgets import Input, Static
 
 from memori.cli.tui.widgets.turn import AssistantTurn, SystemTurn, UserTurn
 from memori.cli.tui.workers import run_chat
@@ -51,6 +51,13 @@ class MemoriApp(App):
         color: ansi_bright_yellow;
         background: ansi_default;
         border-left: outer ansi_yellow;
+        padding: 0 0 0 1;
+        margin: 1 0;
+    }
+    .summarize {
+        color: ansi_bright_magenta;
+        background: ansi_default;
+        border-left: outer ansi_magenta;
         padding: 0 0 0 1;
         margin: 1 0;
     }
@@ -123,7 +130,7 @@ class MemoriApp(App):
             await self.action_quit()
             return
         if line == "/new":
-            self.action_new_session()
+            await self.action_new_session()
             return
         if line == "/reset":
             self.engine.reset([])
@@ -162,16 +169,27 @@ class MemoriApp(App):
             pass
         self.turns.clear()
 
-    def action_new_session(self) -> None:
-        self._save_session()
+    async def _save_session_with_indicator(self, done_text: str | None) -> None:
+        if not self.turns:
+            return
+        indicator = Static("○ Summarizing conversation…", classes="summarize")
+        await self.scroll.mount(indicator)
+        self.scroll.scroll_end(animate=False)
+        try:
+            await asyncio.to_thread(self._save_session)
+        finally:
+            await indicator.remove()
+            if done_text:
+                await self._system(done_text)
+
+    async def action_new_session(self) -> None:
+        await self._save_session_with_indicator(None)
         self.scroll.remove_children()
 
     def action_clear(self) -> None:
         self.scroll.remove_children()
 
     async def action_quit(self) -> None:
+        if self.turns:
+            await self._save_session_with_indicator(None)
         self.exit()
-        try:
-            await asyncio.to_thread(self._save_session)
-        except Exception:
-            pass
