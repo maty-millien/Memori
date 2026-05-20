@@ -5,9 +5,9 @@ sessions:
   - id: duplicate_cleanup
     record_summary: false
     initial_memories:
-      - id: mem_typescript_primary
+      - id: "1"
         content: User prefers TypeScript examples for code answers.
-      - id: mem_typescript_duplicate
+      - id: "2"
         content: User wants coding examples to be written in TypeScript.
     turns:
       - role: user
@@ -20,7 +20,7 @@ sessions:
       tool_calls:
         - name: memory.delete
           arguments:
-            memory_id_regex: mem_typescript_.+
+            memory_id_regex: ^[12]$
       final_memory_count:
         min: 1
         max: 1

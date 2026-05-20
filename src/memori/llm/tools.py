@@ -63,7 +63,10 @@ def register(agent: Agent[Deps, str]) -> None:
 
     @agent.tool
     def memory_delete(ctx: RunContext[Deps], memory_id: str) -> str:
-        """Delete an existing memory the user asks you to forget.
+        """Delete an existing memory.
+
+        Use this when the user asks you to forget a memory, or when retrieved
+        memories contain duplicates and one is redundant.
 
         Args:
             memory_id: The id of the memory to delete.

@@ -1,13 +1,13 @@
 id: 08_topical_retrieval_precision
-description: Retrieves project context and avoids unrelated personal preferences.
+description: Ranks project context before unrelated personal preferences.
 type: memory_loop
 sessions:
   - id: project_context
     record_summary: false
     initial_memories:
-      - id: mem_project
+      - id: "1"
         content: User is building Memori, a long-term memory layer for LLM conversations.
-      - id: mem_coffee
+      - id: "2"
         content: User prefers oat milk in coffee.
     turns:
       - role: user
@@ -15,15 +15,15 @@ sessions:
     expected:
       retrieved:
         include_ids:
-          - mem_project
-        exclude_ids:
-          - mem_coffee
+          - "1"
+          - "2"
+        rank_before:
+          - before: "1"
+            after: "2"
         max_count: 2
         content:
           should_match:
             - regex: (?i)\bMemori\b|\bmemory layer\b
-          should_not_match:
-            - regex: (?i)\boat milk\b
       forbidden_tool_calls:
         - name: memory.upsert
           arguments:

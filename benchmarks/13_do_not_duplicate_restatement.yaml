@@ -5,7 +5,7 @@ sessions:
   - id: restatement
     record_summary: false
     initial_memories:
-      - id: mem_concise
+      - id: "1"
         content: User prefers concise answers.
         scope: global
     turns:
@@ -14,7 +14,7 @@ sessions:
     expected:
       retrieved:
         include_ids:
-          - mem_concise
+          - "1"
       forbidden_tool_calls:
         - name: memory.upsert
       final_memory_count:

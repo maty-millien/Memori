@@ -105,6 +105,15 @@ def check_retrieved(actual: list[Retrieved], spec: RetrievedSpec) -> list[str]:
     for forbidden in spec.exclude_ids:
         if forbidden in ids:
             failures.append(f"did not expect retrieved memory {forbidden!r}")
+    for rank in spec.rank_before:
+        if rank.before not in ids:
+            failures.append(f"expected retrieved memory {rank.before!r}, got {ids!r}")
+        elif rank.after not in ids:
+            failures.append(f"expected retrieved memory {rank.after!r}, got {ids!r}")
+        elif ids.index(rank.before) > ids.index(rank.after):
+            failures.append(
+                f"expected {rank.before!r} to rank before {rank.after!r}, got {ids!r}"
+            )
     if spec.max_count is not None and len(ids) > spec.max_count:
         failures.append(
             f"retrieved count {len(ids)} is above max {spec.max_count}: {ids!r}"

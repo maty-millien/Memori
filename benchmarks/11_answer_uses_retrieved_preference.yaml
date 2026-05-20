@@ -5,7 +5,7 @@ sessions:
   - id: code_answer
     record_summary: false
     initial_memories:
-      - id: mem_code_language
+      - id: "1"
         content: User prefers TypeScript instead of JavaScript for code examples.
         scope: global
     turns:
@@ -14,7 +14,7 @@ sessions:
     expected:
       retrieved:
         include_ids:
-          - mem_code_language
+          - "1"
       answer:
         should_match:
           - regex: (?i)\b(TypeScript|number)\b

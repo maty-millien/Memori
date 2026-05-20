@@ -38,6 +38,7 @@ class SessionTrace:
     similar_conversations: list[dict[str, Any]] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     answer: str = ""
+    recorded_summary: str = ""
     final_memories: list[dict[str, Any]] = field(default_factory=list)
     usage: dict[str, Any] = field(default_factory=dict)
 
@@ -123,9 +124,12 @@ def _run_session(
         if session.record_summary:
             if progress is not None:
                 progress(f"  SUMMARY {session.id}")
-            engine.record_summary(
-                summarize_session([turn.model_dump() for turn in session.turns])
+            recorded_summary = summarize_session(
+                [turn.model_dump() for turn in session.turns]
             )
+            engine.record_summary(recorded_summary)
+        else:
+            recorded_summary = ""
 
         if progress is not None:
             progress(f"  ASSERT {session.id}")
@@ -158,6 +162,7 @@ def _run_session(
                 for call in result.tool_calls
             ],
             answer=answer,
+            recorded_summary=recorded_summary,
             final_memories=[_memory_to_dict(memory) for memory in final_memories],
             usage=_usage_to_dict(result.usage),
         )
@@ -296,6 +301,7 @@ def run_suite(
                         "similar_conversations": session.similar_conversations,
                         "tool_calls": session.tool_calls,
                         "answer": session.answer,
+                        "recorded_summary": session.recorded_summary,
                         "final_memories": session.final_memories,
                         "usage": session.usage,
                     }

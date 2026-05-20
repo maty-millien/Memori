@@ -5,7 +5,7 @@ sessions:
   - id: update_existing
     record_summary: false
     initial_memories:
-      - id: mem_report_style
+      - id: "1"
         content: User prefers very detailed technical reports with lots of explanation.
     turns:
       - role: user
@@ -13,11 +13,11 @@ sessions:
     expected:
       retrieved:
         include_ids:
-          - mem_report_style
+          - "1"
       tool_calls:
         - name: memory.upsert
           arguments:
-            memory_id: mem_report_style
+            memory_id: "1"
             content_regex: (?i)(?=.*\btechnical reports?\b)(?=.*\b(short|concise|brief)\b)(?=.*\b(clear|results?-oriented|summaries)\b)
       forbidden_tool_calls:
         - name: memory.upsert

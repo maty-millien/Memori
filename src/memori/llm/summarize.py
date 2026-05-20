@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from pydantic_ai import Agent
 from pydantic_ai.messages import (
@@ -50,6 +51,23 @@ def _turns_to_text(turns: list[ModelMessage]) -> str:
     return "\n".join(lines)
 
 
+def _summary_from_output(output: str) -> str:
+    raw = output.strip()
+    if not raw:
+        return ""
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        match = re.search(r'"summary"\s*:\s*"(?P<summary>.*?)"', raw, re.DOTALL)
+        if match:
+            return match.group("summary").strip()
+        return raw
+    if not isinstance(parsed, dict):
+        return raw
+    summary = parsed.get("summary")
+    return str(summary).strip() if summary else raw
+
+
 def summarize_session(turns: list[ModelMessage] | list[dict[str, str]]) -> str:
     if not turns:
         return ""
@@ -71,7 +89,4 @@ def summarize_session(turns: list[ModelMessage] | list[dict[str, str]]) -> str:
             },
         ),
     )
-    try:
-        return str(json.loads(result.output).get("summary", "")).strip()
-    except (json.JSONDecodeError, AttributeError):
-        return ""
+    return _summary_from_output(str(result.output))

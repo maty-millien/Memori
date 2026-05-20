@@ -31,6 +31,11 @@ class ContentSpec(StrictModel):
     should_not_match: list[RegexSpec] = Field(default_factory=list)
 
 
+class RankBeforeSpec(StrictModel):
+    before: str
+    after: str
+
+
 class CountSpec(StrictModel):
     min: int | None = None
     max: int | None = None
@@ -39,6 +44,7 @@ class CountSpec(StrictModel):
 class RetrievedSpec(StrictModel):
     include_ids: list[str] = Field(default_factory=list)
     exclude_ids: list[str] = Field(default_factory=list)
+    rank_before: list[RankBeforeSpec] = Field(default_factory=list)
     max_count: int | None = None
     content: ContentSpec = Field(default_factory=ContentSpec)
 

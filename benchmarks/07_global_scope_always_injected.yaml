@@ -5,10 +5,10 @@ sessions:
   - id: unrelated_topic
     record_summary: false
     initial_memories:
-      - id: mem_reply_style
+      - id: "1"
         content: User prefers concise answers with concrete next steps.
         scope: global
-      - id: mem_baking
+      - id: "2"
         content: User is testing a sourdough recipe this weekend.
     turns:
       - role: user
@@ -16,7 +16,7 @@ sessions:
     expected:
       retrieved:
         include_ids:
-          - mem_reply_style
+          - "1"
         max_count: 3
       forbidden_tool_calls:
         - name: memory.upsert

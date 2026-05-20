@@ -5,7 +5,7 @@ sessions:
   - id: forget_request
     record_summary: false
     initial_memories:
-      - id: mem_running
+      - id: "1"
         content: User prefers running workouts in the morning.
     turns:
       - role: user
@@ -13,11 +13,11 @@ sessions:
     expected:
       retrieved:
         include_ids:
-          - mem_running
+          - "1"
       tool_calls:
         - name: memory.delete
           arguments:
-            memory_id: mem_running
+            memory_id: "1"
       forbidden_tool_calls:
         - name: memory.upsert
       final_memory_count:
