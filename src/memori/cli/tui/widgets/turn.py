@@ -36,7 +36,7 @@ class AssistantTurn(Vertical):
         self._ensure_reasoning()
         self._reasoning_buf += s
         assert self._reasoning_widget is not None
-        self._reasoning_widget.update(self._reasoning_buf)
+        self._reasoning_widget.update(self._reasoning_buf.strip())
         self._scroll_end()
 
     def append_content(self, s: str) -> None:

@@ -27,6 +27,7 @@ def judge_trait(answer: str, trait: str) -> JudgeVerdict:
                 {"role": "system", "content": _JUDGE_PROMPT},
                 {"role": "user", "content": user_message},
             ],
+            "reasoning": {"enabled": False, "effort": "none"},
         },
         timeout=120.0,
     )

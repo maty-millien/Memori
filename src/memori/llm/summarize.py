@@ -67,7 +67,7 @@ def summarize_session(turns: list[ModelMessage] | list[dict[str, str]]) -> str:
         model_settings=OpenAIChatModelSettings(
             extra_body={
                 "response_format": {"type": "json_object"},
-                "reasoning": {"enabled": False},
+                "reasoning": {"enabled": False, "effort": "none"},
             },
         ),
     )
