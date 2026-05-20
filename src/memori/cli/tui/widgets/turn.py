@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from textual.app import ComposeResult
+from typing import Any
+
 from textual.containers import Vertical
-from textual.reactive import reactive
 from textual.widgets import Markdown, Static
 
 
@@ -12,29 +12,76 @@ class UserTurn(Static):
 
 
 class AssistantTurn(Vertical):
-    reasoning: reactive[str] = reactive("")
-    content: reactive[str] = reactive("")
-
     def __init__(self) -> None:
         super().__init__(classes="assistant-turn")
-        self._tools: list[str] = []
+        self._last_kind: str | None = None
+        self._reasoning_widget: Static | None = None
+        self._content_widget: Markdown | None = None
+        self._reasoning_buf = ""
+        self._content_buf = ""
 
-    def compose(self) -> ComposeResult:
-        self.tools_view = Static("", classes="tools")
-        self.reasoning_view = Static("", classes="reasoning")
-        self.content_view = Markdown("")
-        yield self.tools_view
-        yield self.reasoning_view
-        yield self.content_view
+    def _ensure_reasoning(self) -> None:
+        if self._reasoning_widget is None or self._last_kind == "content":
+            self._reasoning_buf = ""
+            self._reasoning_widget = Static("", classes="reasoning")
+            self.mount(self._reasoning_widget)
+        self._last_kind = "reasoning"
 
-    def append_tool(self, name: str) -> None:
-        self._tools.append(name)
-        self.tools_view.update("\n".join(f"· {t}" for t in self._tools))
+    def append_reasoning(self, s: str) -> None:
+        self._ensure_reasoning()
+        self._reasoning_buf += s
+        assert self._reasoning_widget is not None
+        self._reasoning_widget.update(self._reasoning_buf)
+        self._scroll_end()
 
-    def watch_reasoning(self, value: str) -> None:
-        if hasattr(self, "reasoning_view"):
-            self.reasoning_view.update(value)
+    def append_content(self, s: str) -> None:
+        if self._last_kind != "content":
+            self._content_buf = ""
+            self._content_widget = Markdown("")
+            self.mount(self._content_widget)
+            self._last_kind = "content"
+        self._content_buf += s
+        assert self._content_widget is not None
+        self._content_widget.update(self._content_buf)
+        self._scroll_end()
 
-    def watch_content(self, value: str) -> None:
-        if hasattr(self, "content_view"):
-            self.content_view.update(value)
+    def append_tool(self, name: str, args: dict[str, Any]) -> None:
+        self._ensure_reasoning()
+        buf = self._reasoning_buf
+        if not buf:
+            prefix = ""
+        elif buf.endswith("\n\n"):
+            prefix = ""
+        elif buf.endswith("\n"):
+            prefix = "\n"
+        else:
+            prefix = "\n\n"
+        self._reasoning_buf += f"{prefix}⚡ {_format_tool_inner(name, args)}\n\n"
+        assert self._reasoning_widget is not None
+        self._reasoning_widget.update(self._reasoning_buf)
+        self._last_kind = "tool"
+        self._scroll_end()
+
+    def _scroll_end(self) -> None:
+        parent = self.parent
+        if parent is not None and hasattr(parent, "scroll_end"):
+            parent.scroll_end(animate=False)
+
+
+def _format_tool_inner(name: str, args: dict[str, Any]) -> str:
+    if not args:
+        return f"{name}()"
+    pieces = [f"{key}={_format_value(value)}" for key, value in args.items()]
+    return f"{name}({', '.join(pieces)})"
+
+
+def _format_value(value: Any) -> str:
+    if isinstance(value, str):
+        text = value.replace("\n", " ")
+        if len(text) > 80:
+            text = text[:77] + "…"
+        return f'"{text}"'
+    rendered = repr(value)
+    if len(rendered) > 80:
+        rendered = rendered[:77] + "…"
+    return rendered

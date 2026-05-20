@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from dotenv import load_dotenv
 from pydantic_ai.messages import ModelMessage
 from textual.app import App, ComposeResult
@@ -23,7 +25,7 @@ class MemoriApp(App):
 
     CSS = """
     Screen { background: ansi_default; color: ansi_default; }
-    #conversation { background: ansi_default; padding: 0 1; }
+    #conversation { background: ansi_default; padding: 0 1; scrollbar-size: 0 0; }
     .user-turn { color: ansi_default; padding-top: 1; background: ansi_default; }
     .reasoning {
         color: ansi_bright_black;
@@ -31,14 +33,8 @@ class MemoriApp(App):
         text-style: italic;
         background: ansi_default;
         border-left: outer ansi_bright_black;
-        padding: 0 0 1 1;
+        padding: 1 0 1 1;
         margin: 0 0 1 0;
-    }
-    .tools {
-        color: ansi_bright_black;
-        background: ansi_default;
-        border-left: outer ansi_bright_black;
-        padding: 0 0 0 1;
     }
     .assistant-turn {
         padding-bottom: 1;
@@ -130,9 +126,13 @@ class MemoriApp(App):
         )
 
     def _save_session(self) -> None:
-        if self.turns:
+        if not self.turns:
+            return
+        try:
             self.engine.record_summary(summarize_session(self.turns))
-            self.turns.clear()
+        except Exception:
+            pass
+        self.turns.clear()
 
     def action_new_session(self) -> None:
         self._save_session()
@@ -142,5 +142,8 @@ class MemoriApp(App):
         self.scroll.remove_children()
 
     async def action_quit(self) -> None:
-        self._save_session()
         self.exit()
+        try:
+            await asyncio.to_thread(self._save_session)
+        except Exception:
+            pass

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic_ai.messages import ModelMessage
 from textual.app import App
 
@@ -18,14 +20,14 @@ def run_chat(
     retrieved = [r.memory for r in engine.retrieve_memories(line)]
     recent, similar = engine.retrieve_conversations(line)
 
-    def _set_reasoning(s: str) -> None:
-        app.call_from_thread(setattr, turn, "reasoning", turn.reasoning + s)
+    def _on_reasoning(s: str) -> None:
+        app.call_from_thread(turn.append_reasoning, s)
 
-    def _set_content(s: str) -> None:
-        app.call_from_thread(setattr, turn, "content", turn.content + s)
+    def _on_content(s: str) -> None:
+        app.call_from_thread(turn.append_content, s)
 
-    def _tool(name: str) -> None:
-        app.call_from_thread(turn.append_tool, name)
+    def _on_tool(name: str, args: dict[str, Any]) -> None:
+        app.call_from_thread(turn.append_tool, name, args)
 
     result = stream_chat(
         line,
@@ -34,8 +36,8 @@ def run_chat(
         similar,
         history=history,
         engine=engine,
-        on_reasoning=_set_reasoning,
-        on_content=_set_content,
-        on_tool=_tool,
+        on_reasoning=_on_reasoning,
+        on_content=_on_content,
+        on_tool=_on_tool,
     )
     history.extend(result.new_messages)

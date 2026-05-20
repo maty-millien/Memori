@@ -78,7 +78,7 @@ async def _stream_async(
     deps: Deps,
     on_reasoning: Callable[[str], None],
     on_content: Callable[[str], None],
-    on_tool: Callable[[str], None],
+    on_tool: Callable[[str, dict[str, Any]], None],
 ) -> tuple[list[ModelMessage], str, str]:
     agent = _get_agent()
     final_content, final_reasoning = "", ""
@@ -119,8 +119,14 @@ async def _stream_async(
                 async with node.stream(run.ctx) as tool_stream:
                     async for tool_event in tool_stream:
                         if isinstance(tool_event, FunctionToolCallEvent):
-                            name = tool_event.part.tool_name
-                            on_tool(DISPLAY_NAME.get(name, name))
+                            part = tool_event.part
+                            name = part.tool_name
+                            args = (
+                                part.args_as_dict()
+                                if hasattr(part, "args_as_dict")
+                                else {}
+                            )
+                            on_tool(DISPLAY_NAME.get(name, name), args)
 
         if run.result is not None:
             new_messages = list(run.result.new_messages())
@@ -137,7 +143,7 @@ def stream_chat(
     engine: Engine | None = None,
     on_reasoning: Callable[[str], None] = _noop,
     on_content: Callable[[str], None] = _noop,
-    on_tool: Callable[[str], None] = _noop,
+    on_tool: Callable[[str, dict[str, Any]], None] = lambda _n, _a: None,
 ) -> LLMResult:
     user_message = build_user_message(
         user_content, retrieved, recent_conversations, similar_conversations
