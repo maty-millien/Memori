@@ -7,6 +7,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
 
 from memori.domain.engine import Engine
+from memori.domain.memory import Importance
 
 
 Scope = Literal["global", "topical"]
@@ -36,6 +37,7 @@ def register(agent: Agent[Deps, str]) -> None:
         content: str,
         memory_id: str | None = None,
         scope: Scope = "topical",
+        importance: Importance = "useful_fact",
     ) -> str:
         """Create a new durable memory or replace the content of an existing one.
 
@@ -52,11 +54,20 @@ def register(agent: Agent[Deps, str]) -> None:
                 that apply to every reply regardless of topic. Use 'topical'
                 (default) for everything else, including domain-specific
                 preferences.
+            importance: Choose 'identity' for the user's name, durable identity,
+                or stable biographical facts; 'global_preference' for always
+                relevant response style, language, format, or coding preferences;
+                'active_project' for current projects, ongoing work, or important
+                goals; 'useful_fact' for normal durable topical facts; 'uncertain'
+                for tentative, weakly stated, or low-confidence facts.
         """
         if ctx.deps.engine is None:
             return f'created memory with id "{memory_id or "?"}"'
         new_id, created = ctx.deps.engine.upsert(
-            content=content, scope=scope, memory_id=memory_id or None
+            content=content,
+            scope=scope,
+            importance=importance,
+            memory_id=memory_id or None,
         )
         verb = "created" if created else "updated"
         return f'{verb} memory with id "{new_id}"'

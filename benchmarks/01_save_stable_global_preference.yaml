@@ -13,6 +13,7 @@ sessions:
           arguments:
             memory_id: null
             scope: global
+            importance: global_preference
             content_regex: (?i)(?=.*\b(concise|short|brief)\b)(?=.*\b(concrete|next steps?|actionable)\b)
       forbidden_tool_calls:
         - name: memory.delete

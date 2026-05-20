@@ -1,0 +1,30 @@
+id: 15_importance_category_reranking
+description: Ranks higher-importance user facts above lower-importance nearby matches.
+type: memory_loop
+sessions:
+  - id: category_weighting
+    record_summary: false
+    initial_memories:
+      - id: "1"
+        content: User's name is Maty.
+        importance: identity
+      - id: "2"
+        content: User mentioned name fields while testing retrieval.
+        importance: useful_fact
+    turns:
+      - role: user
+        content: What is my name?
+    expected:
+      retrieved:
+        include_ids:
+          - "1"
+          - "2"
+        rank_before:
+          - before: "1"
+            after: "2"
+        max_count: 2
+      forbidden_tool_calls:
+        - name: memory.upsert
+      final_memory_count:
+        min: 2
+        max: 2

@@ -12,6 +12,7 @@ sessions:
         - name: memory.upsert
           arguments:
             memory_id: null
+            importance: uncertain
             content_regex: (?i)(?=.*\b(product demo|demo)\b)(?=.*\bFriday\b)(?=.*\b(might|uncertain|not confirmed|not sure|possibly|tentative)\b)
       forbidden_tool_calls:
         - name: memory.delete

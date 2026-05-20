@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from memori.domain.memory import Scope
+from memori.domain.memory import Importance, Scope
 
 
 class StrictModel(BaseModel):
@@ -15,6 +15,7 @@ class MemorySpec(StrictModel):
     id: str
     content: str
     scope: Scope = "topical"
+    importance: Importance = "useful_fact"
 
 
 class TurnSpec(StrictModel):
@@ -54,6 +55,7 @@ class ToolArgumentsSpec(StrictModel):
     memory_id_regex: str | None = None
     content_regex: str | None = None
     scope: Scope | None = None
+    importance: Importance | None = None
 
 
 class ToolCallSpec(StrictModel):

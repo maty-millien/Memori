@@ -194,7 +194,7 @@ class MemoriApp(App):
                 await self._system("(no memories)")
             else:
                 for m in mems:
-                    await self._system(f"{m.id}: {m.content}")
+                    await self._system(f"{m.id} [{m.importance}]: {m.content}")
             return
         if line == "/help":
             await self._system("commands: /new /reset /memories /quit")

@@ -56,7 +56,12 @@ class ScenarioTrace:
 
 
 def _memory_from_spec(spec: MemorySpec) -> Memory:
-    return Memory(id=spec.id, content=spec.content, scope=spec.scope)
+    return Memory(
+        id=spec.id,
+        content=spec.content,
+        scope=spec.scope,
+        importance=spec.importance,
+    )
 
 
 def _memory_to_dict(memory: Memory) -> dict[str, Any]:
@@ -65,7 +70,15 @@ def _memory_to_dict(memory: Memory) -> dict[str, Any]:
         "content": memory.content,
         "scope": memory.scope,
         "kind": memory.kind,
+        "importance": memory.importance,
         "created_at": memory.created_at.isoformat(),
+        "updated_at": memory.updated_at.isoformat(),
+        "last_accessed_at": (
+            memory.last_accessed_at.isoformat()
+            if memory.last_accessed_at is not None
+            else None
+        ),
+        "access_count": memory.access_count,
     }
 
 
@@ -235,7 +248,9 @@ def run_suite(
         for scenario in scenarios:
             if progress is not None:
                 progress(f"START {scenario.id}")
-            future = executor.submit(_run_scenario_in_process, scenario.model_dump())
+            future = executor.submit(
+                _run_scenario_in_process, scenario.model_dump(exclude_unset=True)
+            )
             futures[future] = scenario.id
 
         for future in as_completed(futures):

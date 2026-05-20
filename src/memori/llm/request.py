@@ -5,7 +5,10 @@ from memori.llm.humanize import humanize
 
 
 def _format_injected(memories: list[Memory]) -> str:
-    return "\n".join(f'- id: "{m.id}"\n  content: {m.content}' for m in memories)
+    return "\n".join(
+        f'- id: "{m.id}"\n  importance: {m.importance}\n  content: {m.content}'
+        for m in memories
+    )
 
 
 def _format_conversations(memories: list[Memory]) -> str:

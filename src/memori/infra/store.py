@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import chromadb
 
-from memori.domain.memory import Kind, Memory, Scope, utc_now
+from memori.domain.memory import Importance, Kind, Memory, Scope, utc_now
 from memori.infra.env import require
 from memori.infra.openrouter import OpenRouterClient
 
@@ -22,14 +22,30 @@ def _embed(texts: list[str]) -> list[Embedding]:
 
 def _to_memory(mid: str, doc: str, meta: Mapping[str, Any] | None) -> Memory:
     m = meta or {}
-    ts = m.get("created_at")
+    created_at = _datetime_from_meta(m.get("created_at"))
+    updated_at = _datetime_from_meta(m.get("updated_at")) or created_at or utc_now()
+    last_accessed_at = _datetime_from_meta(m.get("last_accessed_at"))
     return Memory(
         id=mid,
         content=doc,
         scope=cast(Scope, m.get("scope", "topical")),
         kind=cast(Kind, m.get("kind", "memory")),
-        created_at=datetime.fromisoformat(ts) if isinstance(ts, str) else utc_now(),
+        importance=cast(Importance, m.get("importance", "useful_fact")),
+        created_at=created_at or utc_now(),
+        updated_at=updated_at,
+        last_accessed_at=last_accessed_at,
+        access_count=int(m.get("access_count", 0)),
     )
+
+
+def _datetime_from_meta(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    return datetime.fromisoformat(value)
+
+
+def _serialize_datetime(value: datetime | None) -> str:
+    return value.isoformat() if value is not None else ""
 
 
 class Store:
@@ -54,7 +70,11 @@ class Store:
                 {
                     "scope": m.scope,
                     "kind": m.kind,
+                    "importance": m.importance,
                     "created_at": m.created_at.isoformat(),
+                    "updated_at": m.updated_at.isoformat(),
+                    "last_accessed_at": _serialize_datetime(m.last_accessed_at),
+                    "access_count": m.access_count,
                 }
                 for m in items
             ],
@@ -73,6 +93,14 @@ class Store:
     def scope_of(self, memory_id: str) -> Scope:
         metas = self._collection.get(ids=[memory_id]).get("metadatas") or []
         return cast(Scope, metas[0].get("scope", "topical"))
+
+    def get(self, memory_id: str) -> Memory:
+        res = self._collection.get(ids=[memory_id])
+        return _to_memory(
+            memory_id,
+            (res.get("documents") or [""])[0],
+            (res.get("metadatas") or [{}])[0],
+        )
 
     def all(self, kind: Kind | None = None) -> list[Memory]:
         res = (
@@ -106,3 +134,13 @@ class Store:
                 (res.get("metadatas") or [[]])[0],
             )
         ]
+
+    def mark_accessed(self, memories: Iterable[Memory]) -> None:
+        items = list(memories)
+        if not items:
+            return
+        now = utc_now()
+        for memory in items:
+            memory.last_accessed_at = now
+            memory.access_count += 1
+        self.upsert(items)

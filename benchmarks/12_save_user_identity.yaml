@@ -12,6 +12,7 @@ sessions:
         - name: memory.upsert
           arguments:
             memory_id: null
+            importance: identity
             content_regex: (?i)\bMaty\b
       forbidden_tool_calls:
         - name: memory.delete

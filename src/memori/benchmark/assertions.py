@@ -62,6 +62,12 @@ def _arg_matches(actual: ToolCall, expected: ToolArgumentsSpec) -> bool:
         and args.get("scope") != expected.scope
     ):
         return False
+    if (
+        "importance" in fields
+        and expected.importance is not None
+        and args.get("importance") != expected.importance
+    ):
+        return False
     return True
 
 
