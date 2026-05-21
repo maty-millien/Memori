@@ -5,20 +5,16 @@ from datetime import datetime, timezone
 from itertools import count
 
 from memori.domain.memory import Importance, Memory, Retrieved, Scope, utc_now
+from memori.infra.env import require
 from memori.infra.store import Store
 
 
-RETRIEVAL_TOP_K = 20
-RETRIEVAL_POOL_K = 40
-RECENT_CONVERSATIONS = 10
-SIMILAR_CONVERSATIONS = 10
-
-IMPORTANCE_WEIGHT: dict[Importance, float] = {
-    "identity": 0.95,
-    "global_preference": 0.90,
-    "active_project": 0.80,
-    "useful_fact": 0.60,
-    "uncertain": 0.35,
+IMPORTANCE_WEIGHT_ENV: dict[Importance, str] = {
+    "identity": "MEMORI_WEIGHT_IDENTITY",
+    "global_preference": "MEMORI_WEIGHT_GLOBAL_PREFERENCE",
+    "active_project": "MEMORI_WEIGHT_ACTIVE_PROJECT",
+    "useful_fact": "MEMORI_WEIGHT_USEFUL_FACT",
+    "uncertain": "MEMORI_WEIGHT_UNCERTAIN",
 }
 
 
@@ -30,7 +26,9 @@ class Engine:
 
     def retrieve_memories(self, query: str) -> list[Retrieved]:
         candidates: dict[str, tuple[Memory, float]] = {}
-        for mem, score in self._store.query(query, RETRIEVAL_POOL_K, kind="memory"):
+        pool_k = int(require("MEMORI_RETRIEVAL_POOL_K"))
+        top_k = int(require("MEMORI_RETRIEVAL_TOP_K"))
+        for mem, score in self._store.query(query, pool_k, kind="memory"):
             candidates[mem.id] = (mem, score)
         for mem in self._store.all(kind="memory"):
             if mem.scope != "global" or mem.id in candidates:
@@ -41,21 +39,20 @@ class Engine:
             for memory, semantic in candidates.values()
         ]
         ranked.sort(key=lambda item: item.score, reverse=True)
-        retrieved = ranked[:RETRIEVAL_TOP_K]
+        retrieved = ranked[:top_k]
         self._store.mark_accessed(item.memory for item in retrieved)
         return retrieved
 
     def retrieve_conversations(self, query: str) -> tuple[list[Memory], list[Memory]]:
+        recent_k = int(require("MEMORI_RECENT_CONVERSATIONS"))
+        similar_k = int(require("MEMORI_SIMILAR_CONVERSATIONS"))
         recent = sorted(
             self._store.all(kind="conversation"),
             key=lambda m: m.created_at,
             reverse=True,
-        )[:RECENT_CONVERSATIONS]
+        )[:recent_k]
         similar = [
-            m
-            for m, _ in self._store.query(
-                query, SIMILAR_CONVERSATIONS, kind="conversation"
-            )
+            m for m, _ in self._store.query(query, similar_k, kind="conversation")
         ]
         return recent, similar
 
@@ -111,15 +108,19 @@ class Engine:
         self._store.upsert(memories)
 
     def _rank_candidate(self, memory: Memory, semantic: float) -> Retrieved:
-        importance = IMPORTANCE_WEIGHT.get(memory.importance, 0.60)
+        importance = float(require(IMPORTANCE_WEIGHT_ENV[memory.importance]))
         recency = _recency_score(memory.updated_at)
         usage = _usage_score(memory.access_count)
-        scope_boost = 0.10 if memory.scope == "global" else 0.0
+        scope_boost = (
+            float(require("MEMORI_RANK_GLOBAL_SCOPE_BOOST"))
+            if memory.scope == "global"
+            else 0.0
+        )
         score = (
-            (0.70 * semantic)
-            + (0.20 * importance)
-            + (0.07 * recency)
-            + (0.03 * usage)
+            (float(require("MEMORI_RANK_SEMANTIC_WEIGHT")) * semantic)
+            + (float(require("MEMORI_RANK_IMPORTANCE_WEIGHT")) * importance)
+            + (float(require("MEMORI_RANK_RECENCY_WEIGHT")) * recency)
+            + (float(require("MEMORI_RANK_USAGE_WEIGHT")) * usage)
             + scope_boost
         )
         reason = (
