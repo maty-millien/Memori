@@ -7,10 +7,10 @@ from typing import ClassVar
 from dotenv import load_dotenv
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.usage import RunUsage
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual import events
 from textual.widgets import Input, Static
 
 from memori.cli.tui.widgets.turn import AssistantTurn, SystemTurn, UserTurn
@@ -62,9 +62,18 @@ class CommandSuggestions(Vertical):
         for index, command in enumerate(matches[:5]):
             await self.mount(CommandSuggestionRow(command, index == selected_index))
 
+    def update_selection(self, selected_index: int) -> None:
+        for index, row in enumerate(self.query(CommandSuggestionRow)):
+            row.set_selected(index == selected_index)
+
 
 class CommandInput(Input):
-    BINDINGS: ClassVar = [*Input.BINDINGS, Binding("tab", "complete_command")]
+    BINDINGS: ClassVar = [
+        *Input.BINDINGS,
+        Binding("tab", "complete_command", show=False),
+        Binding("up", "previous_command", show=False),
+        Binding("down", "next_command", show=False),
+    ]
 
     async def action_submit(self) -> None:
         app = self.app
@@ -76,6 +85,16 @@ class CommandInput(Input):
         app = self.app
         if isinstance(app, MemoriApp):
             await app.complete_selected_command()
+
+    def action_previous_command(self) -> None:
+        app = self.app
+        if isinstance(app, MemoriApp):
+            app.select_previous_command()
+
+    def action_next_command(self) -> None:
+        app = self.app
+        if isinstance(app, MemoriApp):
+            app.select_next_command()
 
 
 class MemoriApp(App):
@@ -262,16 +281,6 @@ class MemoriApp(App):
             await self._hide_command_suggestions()
             event.stop()
             return
-        if event.key in {"up", "down"} and self._command_matches:
-            delta = -1 if event.key == "up" else 1
-            self._command_selected_index = (self._command_selected_index + delta) % len(
-                self._command_matches
-            )
-            await self.command_suggestions.update_matches(
-                self._command_matches, self._command_selected_index
-            )
-            event.stop()
-            return
         if event.key == "enter" and self._should_complete_on_enter():
             await self.complete_selected_command()
             event.stop()
@@ -292,6 +301,20 @@ class MemoriApp(App):
         await self.command_suggestions.update_matches(
             self._command_matches, self._command_selected_index
         )
+
+    def select_previous_command(self) -> None:
+        self._select_command(-1)
+
+    def select_next_command(self) -> None:
+        self._select_command(1)
+
+    def _select_command(self, delta: int) -> None:
+        if not self._command_matches:
+            return
+        self._command_selected_index = (self._command_selected_index + delta) % len(
+            self._command_matches
+        )
+        self.command_suggestions.update_selection(self._command_selected_index)
 
     async def _hide_command_suggestions(self) -> None:
         self._command_matches = []
