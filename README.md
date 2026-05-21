@@ -8,8 +8,6 @@ A prototype long-term memory layer for LLM conversations. Memori lets an assista
 2. The LLM answers the user. It also has two tools, `memory_upsert` and `memory_delete`, that it uses to keep the long-term memory accurate (creating new memories, refining contradicted ones, pruning duplicates, honoring forget requests).
 3. When a session ends, the system stores a one-sentence summary of the conversation, which later becomes part of the recent / similar context for future sessions.
 
-For the full design, see [ARCHITECTURE.md](ARCHITECTURE.md).
-
 ## Quick start
 
 Requirements: Python 3.10, [`uv`](https://github.com/astral-sh/uv), and a `.env` file at the repo root with:
