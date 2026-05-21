@@ -30,6 +30,7 @@ class Command:
 
 COMMANDS = [
     Command("/new", "start a new session"),
+    Command("/clear", "start a new session"),
     Command("/reset", "clear memories"),
     Command("/memories", "list memories"),
     Command("/help", "show help"),
@@ -99,6 +100,7 @@ class CommandInput(Input):
 
 class MemoriApp(App):
     ansi_color = True
+    ENABLE_COMMAND_PALETTE = False
 
     CSS = """
     Screen { background: ansi_default; color: ansi_default; }
@@ -201,7 +203,6 @@ class MemoriApp(App):
     BINDINGS = [
         Binding("ctrl+n", "new_session", "New"),
         Binding("ctrl+l", "clear", "Clear"),
-        Binding("ctrl+c", "quit", "Quit", priority=True, show=False),
     ]
 
     def __init__(self) -> None:
@@ -350,10 +351,10 @@ class MemoriApp(App):
         if not line:
             return
 
-        if line in {"/quit", "/exit"}:
-            await self.action_quit()
+        if line == "/quit":
+            await self._quit_from_command()
             return
-        if line == "/new":
+        if line in {"/new", "/clear"}:
             await self.action_new_session()
             return
         if line == "/reset":
@@ -370,7 +371,7 @@ class MemoriApp(App):
                     await self._system(f"{m.id} [{m.importance}]: {m.content}")
             return
         if line == "/help":
-            await self._system("commands: /new /reset /memories /quit")
+            await self._system("commands: /new /clear /reset /memories /quit")
             return
 
         await self._say(line)
@@ -420,7 +421,13 @@ class MemoriApp(App):
     def action_clear(self) -> None:
         self.scroll.remove_children()
 
+    def action_help_quit(self) -> None:
+        pass
+
     async def action_quit(self) -> None:
+        pass
+
+    async def _quit_from_command(self) -> None:
         if self.turns:
             await self._save_session_with_indicator(None)
         self.exit()
