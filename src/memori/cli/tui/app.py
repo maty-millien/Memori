@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
+from typing import ClassVar
 
 from dotenv import load_dotenv
 from pydantic_ai.messages import ModelMessage
@@ -8,7 +10,7 @@ from pydantic_ai.usage import RunUsage
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.suggester import SuggestFromList
+from textual import events
 from textual.widgets import Input, Static
 
 from memori.cli.tui.widgets.turn import AssistantTurn, SystemTurn, UserTurn
@@ -18,7 +20,62 @@ from memori.llm.summarize import summarize_session
 
 
 DB_PATH = ".memori"
-COMMANDS = ["/new", "/reset", "/memories", "/help", "/quit"]
+
+
+@dataclass(frozen=True)
+class Command:
+    name: str
+    description: str
+
+
+COMMANDS = [
+    Command("/new", "start a new session"),
+    Command("/reset", "clear memories"),
+    Command("/memories", "list memories"),
+    Command("/help", "show help"),
+    Command("/quit", "exit"),
+]
+
+
+class CommandSuggestionRow(Static):
+    def __init__(self, command: Command, selected: bool) -> None:
+        super().__init__("", classes="command-suggestion-row")
+        self.command = command
+        self.set_class(selected, "selected")
+        self._render_command()
+
+    def set_selected(self, selected: bool) -> None:
+        self.set_class(selected, "selected")
+
+    def _render_command(self) -> None:
+        self.update(f"{self.command.name:<10} {self.command.description}")
+
+
+class CommandSuggestions(Vertical):
+    def __init__(self) -> None:
+        super().__init__(id="command-suggestions")
+        self.display = False
+
+    async def update_matches(self, matches: list[Command], selected_index: int) -> None:
+        self.remove_children()
+        self.display = bool(matches)
+        for index, command in enumerate(matches[:5]):
+            await self.mount(CommandSuggestionRow(command, index == selected_index))
+
+
+class CommandInput(Input):
+    BINDINGS: ClassVar = [*Input.BINDINGS, Binding("tab", "complete_command")]
+
+    async def action_submit(self) -> None:
+        app = self.app
+        if isinstance(app, MemoriApp) and await app.complete_partial_command():
+            return
+        await super().action_submit()
+
+    async def action_complete_command(self) -> None:
+        app = self.app
+        if isinstance(app, MemoriApp):
+            await app.complete_selected_command()
 
 
 class MemoriApp(App):
@@ -93,6 +150,24 @@ class MemoriApp(App):
     }
     Input:focus { border: round ansi_default; }
     Input > .input--suggestion { color: ansi_bright_black; }
+    #command-suggestions {
+        height: auto;
+        max-height: 7;
+        margin: 0 1;
+        padding: 0 1;
+        border: round ansi_bright_black;
+        background: ansi_default;
+    }
+    .command-suggestion-row {
+        height: 1;
+        color: ansi_bright_black;
+        background: ansi_default;
+    }
+    .command-suggestion-row.selected {
+        color: ansi_default;
+        background: ansi_bright_blue;
+        text-style: bold;
+    }
     #status-bar {
         height: 1;
         background: ansi_default;
@@ -121,17 +196,19 @@ class MemoriApp(App):
         self._total_tool_calls = 0
         self._turn_count = 0
         self._last_elapsed = 0.0
+        self._command_matches: list[Command] = []
+        self._command_selected_index = 0
+        self._suppress_next_command_update = False
 
     def compose(self) -> ComposeResult:
         self.scroll = VerticalScroll(id="conversation")
         yield self.scroll
         self.status_left = Static("", id="status-bar-left")
         self.status_right = Static("", id="status-bar-right")
+        self.command_suggestions = CommandSuggestions()
         with Vertical(id="input-area"):
-            yield Input(
-                placeholder="Ask Memori… (/help)",
-                suggester=SuggestFromList(COMMANDS, case_sensitive=False),
-            )
+            yield self.command_suggestions
+            yield CommandInput(placeholder="Ask Memori… (/help)")
             with Horizontal(id="status-bar"):
                 yield self.status_left
                 yield self.status_right
@@ -171,9 +248,82 @@ class MemoriApp(App):
     async def _system(self, text: str) -> None:
         await self.scroll.mount(SystemTurn(text))
 
+    async def on_input_changed(self, event: Input.Changed) -> None:
+        if self._suppress_next_command_update:
+            self._suppress_next_command_update = False
+            await self._hide_command_suggestions()
+            return
+        await self._update_command_suggestions(event.value)
+
+    async def on_key(self, event: events.Key) -> None:
+        if not self.query_one(Input).has_focus:
+            return
+        if event.key == "escape" and self._command_matches:
+            await self._hide_command_suggestions()
+            event.stop()
+            return
+        if event.key in {"up", "down"} and self._command_matches:
+            delta = -1 if event.key == "up" else 1
+            self._command_selected_index = (self._command_selected_index + delta) % len(
+                self._command_matches
+            )
+            await self.command_suggestions.update_matches(
+                self._command_matches, self._command_selected_index
+            )
+            event.stop()
+            return
+        if event.key == "enter" and self._should_complete_on_enter():
+            await self.complete_selected_command()
+            event.stop()
+
+    async def _update_command_suggestions(self, value: str) -> None:
+        if not value.startswith("/") or any(char.isspace() for char in value):
+            await self._hide_command_suggestions()
+            return
+
+        needle = value.casefold()
+        self._command_matches = [
+            command
+            for command in COMMANDS
+            if command.name.casefold().startswith(needle)
+        ]
+        if self._command_selected_index >= len(self._command_matches):
+            self._command_selected_index = 0
+        await self.command_suggestions.update_matches(
+            self._command_matches, self._command_selected_index
+        )
+
+    async def _hide_command_suggestions(self) -> None:
+        self._command_matches = []
+        self._command_selected_index = 0
+        await self.command_suggestions.update_matches([], 0)
+
+    def _should_complete_on_enter(self) -> bool:
+        if not self._command_matches:
+            return False
+        value = self.query_one(Input).value.strip()
+        return all(value != command.name for command in COMMANDS)
+
+    async def complete_partial_command(self) -> bool:
+        if not self._should_complete_on_enter():
+            return False
+        await self.complete_selected_command()
+        return True
+
+    async def complete_selected_command(self) -> None:
+        if not self._command_matches:
+            return
+        command = self._command_matches[self._command_selected_index]
+        input_widget = self.query_one(Input)
+        self._suppress_next_command_update = True
+        input_widget.value = command.name
+        input_widget.cursor_position = len(command.name)
+        await self._hide_command_suggestions()
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         line = event.value.strip()
         event.input.value = ""
+        await self._hide_command_suggestions()
         if not line:
             return
 
