@@ -13,10 +13,9 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Input, Static
 
+from memori import Memori
 from memori.cli.tui.widgets.turn import AssistantTurn, SystemTurn, UserTurn
 from memori.cli.tui.workers import run_chat
-from memori.domain.engine import Engine
-from memori.llm.summarize import summarize_session
 
 
 DB_PATH = ".memori"
@@ -208,7 +207,7 @@ class MemoriApp(App):
     def __init__(self) -> None:
         super().__init__()
         load_dotenv()
-        self.engine = Engine(path=DB_PATH)
+        self.memori = Memori.from_env(path=DB_PATH)
         self.turns: list[ModelMessage] = []
         self._last_input_tokens = 0
         self._last_output_tokens = 0
@@ -358,12 +357,12 @@ class MemoriApp(App):
             await self.action_new_session()
             return
         if line == "/reset":
-            self.engine.reset([])
+            self.memori.reset()
             self.turns.clear()
             await self._system("(memories cleared)")
             return
         if line == "/memories":
-            mems = self.engine.memories()
+            mems = self.memori.memories()
             if not mems:
                 await self._system("(no memories)")
             else:
@@ -380,19 +379,10 @@ class MemoriApp(App):
         self.scroll.scroll_end(animate=False)
 
         self.run_worker(
-            lambda: run_chat(self, turn, line, self.engine, self.turns),
+            lambda: run_chat(self, turn, line, self.memori, self.turns),
             thread=True,
             exclusive=True,
         )
-
-    def _save_session(self) -> None:
-        if not self.turns:
-            return
-        try:
-            self.engine.record_summary(summarize_session(self.turns))
-        except Exception:
-            pass
-        self.turns.clear()
 
     async def _save_session_with_indicator(self, done_text: str | None) -> None:
         if not self.turns:
@@ -401,8 +391,12 @@ class MemoriApp(App):
         await self.scroll.mount(indicator)
         self.scroll.scroll_end(animate=False)
         try:
-            await asyncio.to_thread(self._save_session)
+            try:
+                await asyncio.to_thread(self.memori.end_session)
+            except Exception:
+                pass
         finally:
+            self.turns.clear()
             await indicator.remove()
             if done_text:
                 await self._system(done_text)

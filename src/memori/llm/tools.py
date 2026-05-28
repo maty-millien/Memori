@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
 
 from memori.domain.engine import Engine
 from memori.domain.memory import Importance
+
+if TYPE_CHECKING:
+    from memori.client import Memori
 
 
 Scope = Literal["global", "topical"]
@@ -22,6 +25,7 @@ class ToolCall:
 @dataclass
 class Deps:
     engine: Engine | None
+    memori: Memori | None = None
 
 
 DISPLAY_NAME = {
@@ -61,6 +65,14 @@ def register(agent: Agent[Deps, str]) -> None:
                 goals; 'useful_fact' for normal durable topical facts; 'uncertain'
                 for tentative, weakly stated, or low-confidence facts.
         """
+        args = {
+            "content": content,
+            "memory_id": memory_id,
+            "scope": scope,
+            "importance": importance,
+        }
+        if ctx.deps.memori is not None:
+            return ctx.deps.memori.handle_tool_call("memory_upsert", args)
         if ctx.deps.engine is None:
             return f'created memory with id "{memory_id or "?"}"'
         new_id, created = ctx.deps.engine.upsert(
@@ -82,6 +94,10 @@ def register(agent: Agent[Deps, str]) -> None:
         Args:
             memory_id: The id of the memory to delete.
         """
+        if ctx.deps.memori is not None:
+            return ctx.deps.memori.handle_tool_call(
+                "memory_delete", {"memory_id": memory_id}
+            )
         if ctx.deps.engine is not None:
             ctx.deps.engine.delete(memory_id)
         return f'deleted memory with id "{memory_id}"'

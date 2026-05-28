@@ -23,6 +23,7 @@ from pydantic_ai.usage import RunUsage
 
 from memori.domain.engine import Engine
 from memori.domain.memory import Memory
+from memori.client import Memori
 from memori.llm.agent import build_agent, extract_text, model_settings
 from memori.llm.request import build_user_message
 from memori.llm.tools import DISPLAY_NAME, Deps, ToolCall, extract_tool_calls
@@ -70,13 +71,14 @@ def chat(
     similar_conversations: list[Memory] | None = None,
     history: list[ModelMessage] | None = None,
     engine: Engine | None = None,
+    memori: Memori | None = None,
 ) -> LLMResult:
     user_message = build_user_message(
         user_content, retrieved, recent_conversations, similar_conversations
     )
     result = _get_agent().run_sync(
         user_message,
-        deps=Deps(engine=engine),
+        deps=Deps(engine=engine, memori=memori),
         message_history=history or [],
         model_settings=model_settings(),
     )
@@ -164,6 +166,7 @@ def stream_chat(
     similar_conversations: list[Memory] | None = None,
     history: list[ModelMessage] | None = None,
     engine: Engine | None = None,
+    memori: Memori | None = None,
     on_reasoning: Callable[[str], None] = _noop,
     on_content: Callable[[str], None] = _noop,
     on_tool: Callable[[str, dict[str, Any]], None] = lambda _n, _a: None,
@@ -176,7 +179,7 @@ def stream_chat(
         _stream_async(
             user_message,
             history or [],
-            Deps(engine=engine),
+            Deps(engine=engine, memori=memori),
             on_reasoning,
             on_content,
             on_tool,

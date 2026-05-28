@@ -2,16 +2,12 @@
 
 # Memori
 
-Memori lets an assistant remember preferences, facts, and past chats across fresh-context sessions, with automatic retrieval, LLM-controlled write hygiene, and end-of-session summarization.
+Memori is model-agnostic memory middleware for AI agents. It lets any agent loop retrieve durable memories, expose memory-management tools, and store end-of-session summaries without Memori owning the model call.
 
 [![Python](https://img.shields.io/badge/python-3.10-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![uv](https://img.shields.io/badge/packaging-uv-DE5FE9)](https://github.com/astral-sh/uv)
+[![GitHub install](https://img.shields.io/badge/install-GitHub-181717?logo=github)](https://github.com/maty-millien/Memori)
 [![OpenRouter](https://img.shields.io/badge/LLM-OpenRouter-6E56CF)](https://openrouter.ai/)
-[![Textual](https://img.shields.io/badge/TUI-Textual-1E1E2E)](https://github.com/Textualize/textual)
 [![Chroma](https://img.shields.io/badge/vector_store-Chroma-FF6B6B)](https://www.trychroma.com/)
-[![Pydantic AI](https://img.shields.io/badge/agents-pydantic--ai-E92063)](https://ai.pydantic.dev/)
-[![Ruff](https://img.shields.io/badge/lint-ruff-D7FF64?logo=ruff&logoColor=black)](https://github.com/astral-sh/ruff)
-[![mypy](https://img.shields.io/badge/types-mypy-2A6DB2)](http://mypy-lang.org/)
 
 </div>
 
@@ -19,26 +15,37 @@ Memori lets an assistant remember preferences, facts, and past chats across fres
 
 ![Memori CLI showcasing automatic memory curation](./assets/memori-showcase.png)
 
-## How it works
+## Install From GitHub
 
-1. **Retrieve.** Before each model call, the system pulls top-ranked memories plus recent and similar past conversation summaries, then injects them into context. The default `.env.example` asks for 10 recent and 10 similar summaries.
-2. **Answer + curate.** The LLM responds, and uses two tools, `memory_upsert` and `memory_delete`, to keep long-term memory accurate: creating new memories, refining contradicted ones, pruning duplicates, and honoring forget requests.
-3. **Summarize.** When a session ends, the system stores a one-sentence summary that later feeds the recent / similar context for future sessions.
-
-Ranking blends semantic similarity, importance category (identity > global preference > active project > useful fact > uncertain), recency, and usage, with a small boost for globally-scoped memories.
-
-## Quick start
-
-**Requirements:** Python 3.10, [`uv`](https://github.com/astral-sh/uv), and a `.env` at the repo root.
+Install the library directly from this repository:
 
 ```sh
-make env       # create .venv and install deps (app + dev)
-make run       # start the interactive CLI
+pip install git+https://github.com/maty-millien/Memori.git
 ```
 
-### `.env`
+Install a specific branch:
 
-Copy [`.env.example`](../.env.example) to `.env` and fill in the OpenRouter key. These are the model settings:
+```sh
+pip install git+https://github.com/maty-millien/Memori.git@main
+```
+
+Install from a local checkout while developing:
+
+```sh
+git clone https://github.com/maty-millien/Memori.git
+cd Memori
+pip install -e .
+```
+
+Then import Memori:
+
+```python
+from memori import Memori
+```
+
+## Configure
+
+Memori currently uses OpenRouter for embeddings and session summarization. Create a `.env` file in your project with the values from [`.env.example`](../.env.example):
 
 ```ini
 OPENROUTER_API_KEY=sk-or-v1-...
@@ -47,11 +54,120 @@ MEMORI_REASONING_EFFORT=high
 MEMORI_EMBEDDING_MODEL=perplexity/pplx-embed-v1-4b
 ```
 
-The remaining values in `.env.example` are also read at runtime. They cover retrieval limits (`MEMORI_RETRIEVAL_TOP_K`, `MEMORI_RECENT_CONVERSATIONS`, ...), importance weights per category, and ranking-formula weights (semantic / importance / recency / usage / global-scope boost).
+The remaining values in `.env.example` control retrieval limits, importance weights, and ranking weights.
 
-## Using the CLI
+## Library Usage
 
-Type to chat. Reasoning streams in dim italic, the reply streams in plain, and tool calls show as highlighted lines like `memory.upsert`. Type `/` to open command suggestions. `Tab` and arrow keys navigate, `Enter` selects.
+Memori plugs into an existing agent loop. It does not call your model, manage retries, own streaming, or impose a message format.
+
+```python
+from memori import Memori
+
+memori = Memori.from_env(path=".memori")
+
+user_message = "Please remember that I prefer concise Python examples."
+context = memori.before_turn(user_message)
+
+response = agent.run(
+    prompt=context.prompt,
+    tools=memori.tools(),
+)
+
+for call in response.tool_calls:
+    memori.handle_tool_call(call.name, call.arguments)
+
+memori.after_turn(
+    user_message=user_message,
+    assistant_message=response.text,
+    tool_calls=response.tool_calls,
+)
+
+summary = memori.end_session()
+```
+
+If your agent does not support tools, you can still use retrieval and session summaries:
+
+```python
+context = memori.before_turn(user_message)
+response = agent.run(prompt=context.prompt)
+memori.after_turn(user_message, response.text)
+memori.end_session()
+```
+
+## How It Works
+
+1. **Before a turn**, call `before_turn(user_message)`. Memori retrieves ranked durable memories plus recent and similar past conversation summaries.
+2. **During the agent call**, use `context.prompt` directly or render `context.memories`, `context.recent_conversations`, and `context.similar_conversations` yourself.
+3. **During tool execution**, route `memory_upsert` and `memory_delete` calls to `handle_tool_call(...)`.
+4. **After a turn**, call `after_turn(...)` so Memori can track the active session transcript.
+5. **When a session ends**, call `end_session()`. Memori summarizes the session, stores that summary as conversation memory, and clears the session buffer.
+
+Ranking blends semantic similarity, importance category, recency, usage, and a small boost for globally scoped memories.
+
+## Public API
+
+`Memori.from_env(path: str | None = None) -> Memori`
+
+Creates a Memori instance using the current `.env` settings. Pass `path=".memori"` for a persistent local Chroma store, or omit `path` for an in-memory store.
+
+`before_turn(user_message: str) -> MemoryContext`
+
+Retrieves relevant durable memories, recent conversation summaries, and similar conversation summaries. The returned context includes:
+
+```python
+context.user_message
+context.prompt
+context.retrieved
+context.memories
+context.recent_conversations
+context.similar_conversations
+```
+
+`tools() -> list[MemoryTool]`
+
+Returns framework-neutral tool definitions for `memory_upsert` and `memory_delete`.
+
+`handle_tool_call(name: str, arguments: dict) -> str`
+
+Executes a memory tool call:
+
+```python
+memori.handle_tool_call(
+    "memory_upsert",
+    {
+        "content": "The user prefers concise Python examples.",
+        "scope": "global",
+        "importance": "global_preference",
+    },
+)
+```
+
+`after_turn(user_message: str, assistant_message: str, tool_calls: list | None = None) -> None`
+
+Records a completed turn in the active session transcript. This does not persist a conversation summary yet.
+
+`end_session() -> str`
+
+Summarizes the active session, stores the summary for future recent/similar conversation retrieval, clears the active transcript, and returns the summary. If no turns were recorded, it returns an empty string.
+
+`memories() -> list[Memory]`
+
+Returns durable memories. Conversation summaries are used for retrieval but are not included in this list.
+
+`reset(memories: list[Memory] | None = None) -> None`
+
+Clears stored memories and replaces them with the optional list. This also clears the active session transcript.
+
+## CLI Demo
+
+The CLI is a development/demo app built on the same public `Memori` API. It is not installed as a command by the base library package.
+
+```sh
+make env
+make run
+```
+
+Commands:
 
 | Command     | What it does                                          |
 | ----------- | ----------------------------------------------------- |
@@ -64,7 +180,7 @@ Type to chat. Reasoning streams in dim italic, the reply streams in plain, and t
 
 ## Benchmarks
 
-15 YAML scenarios in [`benchmarks/`](../benchmarks) cover retrieval injection, memory tool calls (create / update / delete / noise rejection), importance reranking, and full multi-session loops.
+15 YAML scenarios in [`benchmarks/`](../benchmarks) cover retrieval injection, memory tool calls, importance reranking, session-end summaries, and multi-session loops.
 
 ```sh
 make benchmark
@@ -72,28 +188,15 @@ make benchmark
 
 A timestamped JSON artifact lands in `.memori/runs/` (gitignored).
 
-## Layout
-
-```
-src/memori/
-  cli/         user-facing REPL (entry + Textual TUI)
-  domain/      memory model and engine
-  infra/       env, OpenRouter client, vector store (Chroma)
-  llm/         chat loop, prompts, tools, summarization
-  benchmark/   scenario loader, runner, assertions, schema
-benchmarks/    scenario YAML files
-.memori/runs/  benchmark run artifacts (gitignored)
-```
-
 ## Development
 
 All tooling is driven through the Makefile so caches, paths, and flags stay consistent.
 
-| Target           | Description                                                          |
-| ---------------- | -------------------------------------------------------------------- |
-| `make env`       | Create `.venv` and install `app` + `dev` dependency groups           |
-| `make clean`     | Remove `.venv`                                                       |
-| `make run`       | Alias for `make cli`                                                 |
-| `make cli`       | Start the interactive CLI                                            |
-| `make benchmark` | Run YAML scenarios in `benchmarks/`, writing JSON to `.memori/runs/` |
-| `make tidy`      | `mypy`, `ruff check --fix`, `ruff format`, `prettier --write`        |
+| Target           | Description                                                           |
+| ---------------- | --------------------------------------------------------------------- |
+| `make env`       | Create `.venv` and install the package plus app/dev dependency groups |
+| `make clean`     | Remove `.venv`                                                        |
+| `make run`       | Alias for `make cli`                                                  |
+| `make cli`       | Start the interactive CLI                                             |
+| `make benchmark` | Run YAML scenarios in `benchmarks/`, writing JSON to `.memori/runs/`  |
+| `make tidy`      | `mypy`, `ruff check --fix`, `ruff format`, and `prettier --write`     |

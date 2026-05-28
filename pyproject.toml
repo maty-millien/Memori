@@ -1,11 +1,27 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memori"
+version = "0.1.0"
+description = "Model-agnostic memory middleware for AI agents."
+readme = "docs/README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "chromadb",
+    "httpx",
+    "pydantic-ai-slim[openai]",
+    "python-dotenv",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [dependency-groups]
 app = [
     "PyYAML",
-    "chromadb",
-    "httpx",
     "pydantic",
-    "pydantic-ai-slim[openai]",
-    "python-dotenv",
     "textual",
 ]
 dev = ["mypy", "ruff", "types-PyYAML"]

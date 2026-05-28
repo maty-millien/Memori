@@ -15,10 +15,9 @@ from memori.benchmark.assertions import (
     public_tool_name,
 )
 from memori.benchmark.schema import MemorySpec, ScenarioSpec, SessionSpec
-from memori.domain.engine import Engine
+from memori import Memori
 from memori.domain.memory import Memory
 from memori.llm.chat import chat
-from memori.llm.summarize import summarize_session
 
 
 Status = Literal["passed", "failed", "error"]
@@ -97,7 +96,7 @@ def _status(failures: list[str], error: str | None = None) -> Status:
 
 
 def _run_session(
-    engine: Engine, session: SessionSpec, progress: ProgressFn | None = None
+    memori: Memori, session: SessionSpec, progress: ProgressFn | None = None
 ) -> SessionTrace:
     start = time.monotonic()
     failures: list[str] = []
@@ -107,7 +106,7 @@ def _run_session(
         if session.initial_memories is not None:
             if progress is not None:
                 progress(f"  RESET {session.id}")
-            engine.reset(
+            memori.reset(
                 [_memory_from_spec(memory) for memory in session.initial_memories]
             )
 
@@ -115,20 +114,22 @@ def _run_session(
         user_content = user_turns[-1]
         if progress is not None:
             progress(f"  RETRIEVE {session.id}")
-        retrieved = engine.retrieve_memories(user_content)
+        context = memori.before_turn(user_content)
+        retrieved = context.retrieved
         failures.extend(check_retrieved(retrieved, session.expected.retrieved))
 
         if progress is not None:
             progress(f"  CONVERSATIONS {session.id}")
-        recent, similar = engine.retrieve_conversations(user_content)
+        recent = context.recent_conversations
+        similar = context.similar_conversations
         if progress is not None:
             progress(f"  CHAT {session.id}")
         result = chat(
             user_content,
-            [item.memory for item in retrieved],
+            context.memories,
             recent,
             similar,
-            engine=engine,
+            memori=memori,
         )
         answer = str(result.assistant_message.get("content") or "")
         failures.extend(check_tool_calls(result.tool_calls, session.expected))
@@ -137,16 +138,14 @@ def _run_session(
         if session.record_summary:
             if progress is not None:
                 progress(f"  SUMMARY {session.id}")
-            recorded_summary = summarize_session(
-                [turn.model_dump() for turn in session.turns]
-            )
-            engine.record_summary(recorded_summary)
+            memori.after_turn(user_content, answer, result.tool_calls)
+            recorded_summary = memori.end_session()
         else:
             recorded_summary = ""
 
         if progress is not None:
             progress(f"  ASSERT {session.id}")
-        final_memories = engine.memories()
+        final_memories = memori.memories()
         failures.extend(check_memory_state(final_memories, session.expected))
         elapsed = time.monotonic() - start
 
@@ -190,7 +189,7 @@ def _run_session(
             failures=failures,
             error=error,
             user_turns=[turn.content for turn in session.turns],
-            final_memories=[_memory_to_dict(memory) for memory in engine.memories()],
+            final_memories=[_memory_to_dict(memory) for memory in memori.memories()],
         )
 
 
@@ -198,18 +197,18 @@ def run_scenario(
     scenario: ScenarioSpec, progress: ProgressFn | None = None
 ) -> ScenarioTrace:
     start = time.monotonic()
-    engine = Engine()
+    memori = Memori.from_env()
     failures: list[str] = []
     sessions: list[SessionTrace] = []
 
     for session in scenario.sessions:
-        trace = _run_session(engine, session, progress)
+        trace = _run_session(memori, session, progress)
         sessions.append(trace)
         failures.extend(f"[{session.id}] {failure}" for failure in trace.failures)
         if trace.error is not None:
             failures.append(f"[{session.id}] {trace.error}")
 
-    final_memories = engine.memories()
+    final_memories = memori.memories()
     failures.extend(check_memory_state(final_memories, scenario.final_state))
     status = _status(failures)
     if any(session.status == "error" for session in sessions):

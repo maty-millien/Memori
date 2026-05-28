@@ -13,7 +13,7 @@ PYTHON = PYTHONPATH=$(SOURCE_DIR) PYTHONPYCACHEPREFIX=$(PYCACHE_DIR) $(PYTHON_BI
 
 env: clean
 	uv venv $(ENV_DIR) --python $(PYTHON_VERSION)
-	uv pip install --python $(PYTHON_BIN) --group app --group dev
+	uv pip install --python $(PYTHON_BIN) -e . --group app --group dev
 
 clean:
 	rm -rf $(ENV_DIR)
