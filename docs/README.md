@@ -16,11 +16,11 @@ Memori lets an assistant remember preferences, facts, and past chats across fres
 [![mypy](https://img.shields.io/badge/types-mypy-2A6DB2)](http://mypy-lang.org/)
 [![Status](https://img.shields.io/badge/status-prototype-orange)]()
 
-`#llm` · `#memory` · `#rag` · `#agents` · `#tool-use` · `#vector-search` · `#openrouter` · `#textual` · `#cli`
-
 </div>
 
 ---
+
+![Memori CLI showcasing automatic memory curation](./assets/memori-showcase.png)
 
 ## How it works
 
@@ -41,7 +41,7 @@ make run       # start the interactive CLI
 
 ### `.env`
 
-Copy [`.env.example`](./.env.example) to `.env` and fill in the OpenRouter key. These are the model settings:
+Copy [`.env.example`](../.env.example) to `.env` and fill in the OpenRouter key. These are the model settings:
 
 ```ini
 OPENROUTER_API_KEY=sk-or-v1-...
@@ -67,7 +67,7 @@ Type to chat. Reasoning streams in dim italic, the reply streams in plain, and t
 
 ## Benchmarks
 
-15 YAML scenarios in [`benchmarks/`](./benchmarks) cover retrieval injection, memory tool calls (create / update / delete / noise rejection), importance reranking, and full multi-session loops.
+15 YAML scenarios in [`benchmarks/`](../benchmarks) cover retrieval injection, memory tool calls (create / update / delete / noise rejection), importance reranking, and full multi-session loops.
 
 ```sh
 make benchmark
