@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v3
       - run: uv venv .ci-venv --python 3.10
-      - run: uv pip install --python .ci-venv/bin/python --group app --group dev
+      - run: uv pip install --python .ci-venv/bin/python -e . --group app --group dev
       - run: MYPYPATH=src .ci-venv/bin/mypy --explicit-package-bases src
 
   prettier:
