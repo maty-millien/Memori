@@ -10,12 +10,12 @@ from memori.benchmark.loader import load_scenarios
 from memori.benchmark.runner import run_suite
 
 
-RUNS_DIR = Path("runs")
+RUNS_DIR = Path(".memori") / "runs"
 
 
 def main() -> None:
     load_dotenv()
-    RUNS_DIR.mkdir(exist_ok=True)
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
     scenarios = load_scenarios()
     print(f"Running {len(scenarios)} benchmark scenarios (process-parallel)")
