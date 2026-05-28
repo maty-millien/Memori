@@ -2,8 +2,6 @@
 
 # Memori
 
-**A prototype long-term memory layer for LLM conversations.**
-
 Memori lets an assistant remember preferences, facts, and past chats across fresh-context sessions, with automatic retrieval, LLM-controlled write hygiene, and end-of-session summarization.
 
 [![Python](https://img.shields.io/badge/python-3.10-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -14,7 +12,6 @@ Memori lets an assistant remember preferences, facts, and past chats across fres
 [![Pydantic AI](https://img.shields.io/badge/agents-pydantic--ai-E92063)](https://ai.pydantic.dev/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-D7FF64?logo=ruff&logoColor=black)](https://github.com/astral-sh/ruff)
 [![mypy](https://img.shields.io/badge/types-mypy-2A6DB2)](http://mypy-lang.org/)
-[![Status](https://img.shields.io/badge/status-prototype-orange)]()
 
 </div>
 
