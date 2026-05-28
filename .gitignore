@@ -214,6 +214,5 @@ tmp/
 .local/
 *.pdf
 output*/
-.memori/
 *.md
 !README.md

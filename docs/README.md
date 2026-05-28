@@ -70,7 +70,7 @@ Type to chat. Reasoning streams in dim italic, the reply streams in plain, and t
 make benchmark
 ```
 
-A timestamped markdown log lands in `runs/` (gitignored).
+A timestamped JSON artifact lands in `.memori/runs/` (gitignored).
 
 ## Layout
 
@@ -82,18 +82,18 @@ src/memori/
   llm/         chat loop, prompts, tools, summarization
   benchmark/   scenario loader, runner, assertions, schema
 benchmarks/    scenario YAML files
-runs/          benchmark run logs (gitignored)
+.memori/runs/  benchmark run artifacts (gitignored)
 ```
 
 ## Development
 
 All tooling is driven through the Makefile so caches, paths, and flags stay consistent.
 
-| Target           | Description                                                   |
-| ---------------- | ------------------------------------------------------------- |
-| `make env`       | Create `.venv` and install `app` + `dev` dependency groups    |
-| `make clean`     | Remove `.venv`                                                |
-| `make run`       | Alias for `make cli`                                          |
-| `make cli`       | Start the interactive CLI                                     |
-| `make benchmark` | Run YAML scenarios in `benchmarks/`, writing a log to `runs/` |
-| `make tidy`      | `mypy`, `ruff check --fix`, `ruff format`, `prettier --write` |
+| Target           | Description                                                          |
+| ---------------- | -------------------------------------------------------------------- |
+| `make env`       | Create `.venv` and install `app` + `dev` dependency groups           |
+| `make clean`     | Remove `.venv`                                                       |
+| `make run`       | Alias for `make cli`                                                 |
+| `make cli`       | Start the interactive CLI                                            |
+| `make benchmark` | Run YAML scenarios in `benchmarks/`, writing JSON to `.memori/runs/` |
+| `make tidy`      | `mypy`, `ruff check --fix`, `ruff format`, `prettier --write`        |
