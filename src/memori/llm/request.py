@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from memori.domain.memory import Memory
 from memori.llm.humanize import humanize
 
@@ -19,11 +21,18 @@ def _wrap(tag: str, body: str) -> str:
     return f"<{tag}>\n{body}\n</{tag}>"
 
 
+def timestamped_user_content(user_content: str) -> str:
+    now = datetime.now().astimezone().replace(microsecond=0)
+    return "\n\n".join([_wrap("user_datetime", now.isoformat()), user_content])
+
+
 def build_user_message(
     user_content: str,
     retrieved: list[Memory],
     recent_conversations: list[Memory] | None,
     similar_conversations: list[Memory] | None,
+    *,
+    add_timestamp: bool = True,
 ) -> str:
     blocks: list[str] = []
     if recent_conversations:
@@ -36,4 +45,9 @@ def build_user_message(
         )
     if retrieved:
         blocks.append(_wrap("relevant_memories", _format_injected(retrieved)))
-    return "\n\n".join([*blocks, user_content]) if blocks else user_content
+    timestamped_content = (
+        timestamped_user_content(user_content) if add_timestamp else user_content
+    )
+    return (
+        "\n\n".join([*blocks, timestamped_content]) if blocks else timestamped_content
+    )

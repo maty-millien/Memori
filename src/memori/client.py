@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from memori.domain.engine import Engine
 from memori.domain.memory import Importance, Memory, Retrieved, Scope
-from memori.llm.request import build_user_message
+from memori.llm.request import build_user_message, timestamped_user_content
 from memori.llm.summarize import summarize_session
 
 
@@ -155,7 +155,9 @@ class Memori:
         assistant_message: str,
         tool_calls: list[Any] | None = None,
     ) -> None:
-        self._session_turns.append(SessionTurn(role="user", content=user_message))
+        self._session_turns.append(
+            SessionTurn(role="user", content=timestamped_user_content(user_message))
+        )
         self._session_turns.append(
             SessionTurn(role="assistant", content=assistant_message)
         )
