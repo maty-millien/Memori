@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 from memori.domain.memory import Memory
 from memori.llm.humanize import humanize
@@ -21,9 +22,23 @@ def _wrap(tag: str, body: str) -> str:
     return f"<{tag}>\n{body}\n</{tag}>"
 
 
+def _local_timezone_name(now: datetime) -> str:
+    if now.tzinfo is not None and hasattr(now.tzinfo, "key"):
+        return str(now.tzinfo.key)
+    localtime = Path("/etc/localtime")
+    if localtime.exists():
+        zoneinfo_path = str(localtime.resolve())
+        marker = "/zoneinfo/"
+        if marker in zoneinfo_path:
+            return zoneinfo_path.split(marker, 1)[1]
+    return now.tzname() or str(now.tzinfo)
+
+
 def timestamped_user_content(user_content: str) -> str:
     now = datetime.now().astimezone().replace(microsecond=0)
-    return "\n\n".join([_wrap("user_datetime", now.isoformat()), user_content])
+    timezone = _local_timezone_name(now)
+    metadata = f"datetime: {now.isoformat()}\ntimezone: {timezone}"
+    return "\n\n".join([_wrap("message_metadata", metadata), user_content])
 
 
 def build_user_message(
