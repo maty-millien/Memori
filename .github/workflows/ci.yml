@@ -17,9 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: python3 -m venv .ci-venv
-      - run: .ci-venv/bin/python -m pip install "ruff>=0.6.0"
-      - run: .ci-venv/bin/ruff check src
-      - run: .ci-venv/bin/ruff format --check src
+      - run: .ci-venv/bin/python -m pip install ruff
+      - run: .ci-venv/bin/ruff check memori tools
+      - run: .ci-venv/bin/ruff format --check memori tools
 
   mypy:
     name: Mypy (types)
@@ -29,7 +29,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv venv .ci-venv --python 3.10
       - run: uv pip install --python .ci-venv/bin/python -e . --group app --group dev
-      - run: MYPYPATH=src .ci-venv/bin/mypy --explicit-package-bases src
+      - run: MYPYPATH=.:tools .ci-venv/bin/mypy --explicit-package-bases memori tools
 
   prettier:
     name: Prettier (format)
