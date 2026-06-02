@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
+from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import Markdown, Static
 
@@ -17,19 +18,56 @@ class SystemTurn(Static):
 
 
 class AssistantTurn(Vertical):
+    _THINKING_FRAMES: ClassVar[tuple[str, ...]] = (
+        "⠋",
+        "⠙",
+        "⠹",
+        "⠸",
+        "⠼",
+        "⠴",
+        "⠦",
+        "⠧",
+        "⠇",
+        "⠏",
+    )
+
     def __init__(self) -> None:
         super().__init__(classes="assistant-turn")
+        self._thinking_widget = Static("", classes="thinking-indicator")
+        self._thinking_frame = 0
+        self._thinking_timer: Any = None
         self._last_kind: str | None = None
         self._reasoning_widget: Static | None = None
         self._content_widget: Markdown | None = None
         self._reasoning_buf = ""
         self._content_buf = ""
 
+    def compose(self) -> ComposeResult:
+        yield self._thinking_widget
+
+    def on_mount(self) -> None:
+        self._render_thinking()
+        self._thinking_timer = self.set_interval(0.08, self._tick_thinking)
+
+    def stop_thinking(self) -> None:
+        if self._thinking_timer is not None:
+            self._thinking_timer.stop()
+            self._thinking_timer = None
+        self._thinking_widget.display = False
+
+    def _tick_thinking(self) -> None:
+        self._thinking_frame = (self._thinking_frame + 1) % len(self._THINKING_FRAMES)
+        self._render_thinking()
+
+    def _render_thinking(self) -> None:
+        frame = self._THINKING_FRAMES[self._thinking_frame]
+        self._thinking_widget.update(f"{frame} Thinking...")
+
     def _ensure_reasoning(self) -> None:
         if self._reasoning_widget is None or self._last_kind != "reasoning":
             self._reasoning_buf = ""
             self._reasoning_widget = Static("", classes="reasoning")
-            self.mount(self._reasoning_widget)
+            self.mount(self._reasoning_widget, before=self._thinking_widget)
         self._last_kind = "reasoning"
 
     def append_reasoning(self, s: str) -> None:
@@ -43,7 +81,7 @@ class AssistantTurn(Vertical):
         if self._last_kind != "content":
             self._content_buf = ""
             self._content_widget = Markdown("")
-            self.mount(self._content_widget)
+            self.mount(self._content_widget, before=self._thinking_widget)
             self._last_kind = "content"
         self._content_buf += s
         assert self._content_widget is not None
@@ -51,7 +89,10 @@ class AssistantTurn(Vertical):
         self._scroll_end()
 
     def append_tool(self, name: str, args: dict[str, Any]) -> None:
-        self.mount(Static(_format_tool_inner(name, args), classes="tool-call"))
+        self.mount(
+            Static(_format_tool_inner(name, args), classes="tool-call"),
+            before=self._thinking_widget,
+        )
         self._last_kind = "tool"
         self._reasoning_widget = None
         self._scroll_end()

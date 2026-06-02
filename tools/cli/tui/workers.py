@@ -28,17 +28,20 @@ def run_chat(
     def _on_tool(name: str, args: dict[str, Any]) -> None:
         app.call_from_thread(turn.append_tool, name, args)
 
-    result = stream_chat(
-        line,
-        context.memories,
-        context.recent_conversations,
-        context.similar_conversations,
-        history=history,
-        memori=memori,
-        on_reasoning=_on_reasoning,
-        on_content=_on_content,
-        on_tool=_on_tool,
-    )
+    try:
+        result = stream_chat(
+            line,
+            context.memories,
+            context.recent_conversations,
+            context.similar_conversations,
+            history=history,
+            memori=memori,
+            on_reasoning=_on_reasoning,
+            on_content=_on_content,
+            on_tool=_on_tool,
+        )
+    finally:
+        app.call_from_thread(turn.stop_thinking)
     history.extend(result.new_messages)
     memori.after_turn(
         line,

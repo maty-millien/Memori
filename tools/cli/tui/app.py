@@ -147,6 +147,16 @@ class MemoriApp(App):
         height: auto;
         background: ansi_default;
     }
+    .thinking-indicator {
+        height: 1;
+        width: 100%;
+        color: ansi_bright_black;
+        text-opacity: 80%;
+        text-style: italic;
+        background: ansi_default;
+        margin: 1 0 0 0;
+        padding: 0 0 0 1;
+    }
     Markdown {
         background: ansi_default;
         color: ansi_default;
