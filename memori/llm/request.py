@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from memori.domain.memory import Memory
 
@@ -13,10 +14,39 @@ def _format_injected(memories: list[Memory]) -> str:
     )
 
 
+def _local_zoneinfo_name(now: datetime) -> str | None:
+    if now.tzinfo is not None and hasattr(now.tzinfo, "key"):
+        return str(now.tzinfo.key)
+    localtime = Path("/etc/localtime")
+    if localtime.exists():
+        zoneinfo_path = str(localtime.resolve())
+        marker = "/zoneinfo/"
+        if marker in zoneinfo_path:
+            return zoneinfo_path.split(marker, 1)[1]
+    return None
+
+
+def _local_timezone(now: datetime) -> tuple[tzinfo, str]:
+    timezone_name = _local_zoneinfo_name(now)
+    if timezone_name:
+        try:
+            return ZoneInfo(timezone_name), timezone_name
+        except ZoneInfoNotFoundError:
+            pass
+    if now.tzinfo is not None and now.utcoffset() is not None:
+        return now.tzinfo, now.tzname() or str(now.tzinfo)
+    return timezone.utc, "UTC"
+
+
 def _format_timestamp(ts: datetime) -> str:
+    local_tz, timezone_name = _local_timezone(datetime.now().astimezone())
     if ts.tzinfo is None or ts.utcoffset() is None:
         ts = ts.replace(tzinfo=timezone.utc)
-    return ts.isoformat(timespec="seconds")
+    local_ts = ts.astimezone(local_tz)
+    return (
+        f"local_datetime: {local_ts.isoformat(timespec='seconds')}; "
+        f"timezone: {timezone_name}"
+    )
 
 
 def _format_conversations(memories: list[Memory]) -> str:
@@ -30,14 +60,9 @@ def _wrap(tag: str, body: str) -> str:
 
 
 def _local_timezone_name(now: datetime) -> str:
-    if now.tzinfo is not None and hasattr(now.tzinfo, "key"):
-        return str(now.tzinfo.key)
-    localtime = Path("/etc/localtime")
-    if localtime.exists():
-        zoneinfo_path = str(localtime.resolve())
-        marker = "/zoneinfo/"
-        if marker in zoneinfo_path:
-            return zoneinfo_path.split(marker, 1)[1]
+    timezone_name = _local_zoneinfo_name(now)
+    if timezone_name:
+        return timezone_name
     return now.tzname() or str(now.tzinfo)
 
 
