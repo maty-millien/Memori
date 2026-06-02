@@ -23,12 +23,6 @@ Install the library directly from this repository:
 pip install git+https://github.com/maty-millien/Memori.git
 ```
 
-Install a specific branch:
-
-```sh
-pip install git+https://github.com/maty-millien/Memori.git@main
-```
-
 Install from a local checkout while developing:
 
 ```sh
