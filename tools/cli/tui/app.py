@@ -157,17 +157,13 @@ class MemoriApp(App):
         margin: 1 0 0 0;
         padding: 0 0 0 1;
     }
-    Markdown {
+    .assistant-content {
         background: ansi_default;
         color: ansi_default;
         margin: 1 0 0 0;
         padding: 0 0 0 1;
         border-left: outer ansi_bright_blue;
     }
-    Markdown > * { background: ansi_default; margin: 0; padding: 0; }
-    MarkdownParagraph { margin: 0; padding: 0; }
-    MarkdownFence, MarkdownCode { background: ansi_default; color: ansi_bright_magenta; }
-    MarkdownH1, MarkdownH2, MarkdownH3 { color: ansi_bright_blue; text-style: bold; }
     #input-area {
         dock: bottom;
         height: auto;

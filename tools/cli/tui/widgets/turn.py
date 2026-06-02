@@ -4,7 +4,7 @@ from typing import Any, ClassVar
 
 from textual.app import ComposeResult
 from textual.containers import Vertical
-from textual.widgets import Markdown, Static
+from textual.widgets import Static
 
 
 class UserTurn(Static):
@@ -38,7 +38,7 @@ class AssistantTurn(Vertical):
         self._thinking_timer: Any = None
         self._last_kind: str | None = None
         self._reasoning_widget: Static | None = None
-        self._content_widget: Markdown | None = None
+        self._content_widget: Static | None = None
         self._reasoning_buf = ""
         self._content_buf = ""
 
@@ -80,12 +80,12 @@ class AssistantTurn(Vertical):
     def append_content(self, s: str) -> None:
         if self._last_kind != "content":
             self._content_buf = ""
-            self._content_widget = Markdown("")
+            self._content_widget = Static("", classes="assistant-content", markup=False)
             self.mount(self._content_widget, before=self._thinking_widget)
             self._last_kind = "content"
         self._content_buf += s
         assert self._content_widget is not None
-        self._content_widget.update(self._content_buf)
+        self._content_widget.update(self._content_buf.strip())
         self._scroll_end()
 
     def append_tool(self, name: str, args: dict[str, Any]) -> None:
