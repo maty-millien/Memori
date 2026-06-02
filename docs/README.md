@@ -51,7 +51,7 @@ Memori currently uses OpenRouter for embeddings and session summarization. Creat
 OPENROUTER_API_KEY=sk-or-v1-...
 MEMORI_LLM_MODEL=deepseek/deepseek-v4-flash
 MEMORI_REASONING_EFFORT=high
-MEMORI_EMBEDDING_MODEL=perplexity/pplx-embed-v1-4b
+MEMORI_EMBEDDING_MODEL=google/gemini-embedding-2
 ```
 
 The remaining values in `.env.example` control retrieval limits, importance weights, and ranking weights.
