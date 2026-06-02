@@ -21,12 +21,11 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.usage import RunUsage
 
+from chat.agent import build_agent, extract_text, model_settings
+from chat.tools import DISPLAY_NAME, Deps, ToolCall, extract_tool_calls
+from memori import Memori, Memory
 from memori.domain.engine import Engine
-from memori.domain.memory import Memory
-from memori.client import Memori
-from memori.llm.agent import build_agent, extract_text, model_settings
 from memori.llm.request import build_user_message, timestamped_user_content
-from memori.llm.tools import DISPLAY_NAME, Deps, ToolCall, extract_tool_calls
 
 
 @dataclass

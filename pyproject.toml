@@ -16,7 +16,8 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["memori*"]
 
 [dependency-groups]
 app = [

@@ -49,10 +49,3 @@ Each turn has exactly one shape: any memory tool calls first (in the same respon
 - `global` — preferences that apply to every reply regardless of topic: language ("answer in French"), tone, length, format, output style.
 - `topical` — everything else, including domain-specific preferences ("prefers running in the morning", "prefers oat milk"). Default when unsure.
 """
-
-
-SUMMARY_PROMPT = (
-    'Return JSON of shape {"summary": "<one or two sentences>"}. Write the summary '
-    "in the third person, focusing on what the user wanted and what was decided. "
-    "Skip greetings and small talk."
-)

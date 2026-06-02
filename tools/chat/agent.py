@@ -5,9 +5,9 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.providers.openai import OpenAIProvider
 
+from chat.prompts import SYSTEM_PROMPT
+from chat.tools import Deps, register
 from memori.infra.env import require
-from memori.llm.prompts import SYSTEM_PROMPT
-from memori.llm.tools import Deps, register
 
 
 def _build_model() -> OpenAIChatModel:

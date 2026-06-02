@@ -10,7 +10,7 @@ from memori.domain.engine import Engine
 from memori.domain.memory import Importance
 
 if TYPE_CHECKING:
-    from memori.client import Memori
+    from memori import Memori
 
 
 Scope = Literal["global", "topical"]

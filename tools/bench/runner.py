@@ -7,17 +7,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from memori.benchmark.assertions import (
+from bench.assertions import (
     check_content,
     check_memory_state,
     check_retrieved,
     check_tool_calls,
     public_tool_name,
 )
-from memori.benchmark.schema import MemorySpec, ScenarioSpec, SessionSpec
+from bench.schema import MemorySpec, ScenarioSpec, SessionSpec
+from chat.chat import chat
 from memori import Memori
 from memori.domain.memory import Memory
-from memori.llm.chat import chat
 
 
 Status = Literal["passed", "failed", "error"]

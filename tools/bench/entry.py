@@ -6,8 +6,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from memori.benchmark.loader import load_scenarios
-from memori.benchmark.runner import run_suite
+from bench.loader import load_scenarios
+from bench.runner import run_suite
 
 
 RUNS_DIR = Path(".memori") / "runs"
@@ -18,7 +18,7 @@ def main() -> None:
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
     scenarios = load_scenarios()
-    print(f"Running {len(scenarios)} benchmark scenarios (process-parallel)")
+    print(f"Running {len(scenarios)} bench scenarios (process-parallel)")
     result = run_suite(scenarios, progress=lambda line: print(line, flush=True))
 
     path = RUNS_DIR / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"

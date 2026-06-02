@@ -5,9 +5,9 @@ from typing import Any
 from pydantic_ai.messages import ModelMessage
 from textual.app import App
 
-from memori.cli.tui.widgets.turn import AssistantTurn
 from memori import Memori
-from memori.llm.chat import stream_chat
+from chat.chat import stream_chat
+from cli.tui.widgets.turn import AssistantTurn
 
 
 def run_chat(

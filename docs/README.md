@@ -178,12 +178,12 @@ Commands:
 | `/help`     | Show help                                             |
 | `/quit`     | Save the current session as a summary and exit        |
 
-## Benchmarks
+## Bench
 
-15 YAML scenarios in [`benchmarks/`](../benchmarks) cover retrieval injection, memory tool calls, importance reranking, session-end summaries, and multi-session loops.
+15 YAML scenarios in [`tools/bench/scenarios/`](../tools/bench/scenarios) cover retrieval injection, memory tool calls, importance reranking, session-end summaries, and multi-session loops.
 
 ```sh
-make benchmark
+make bench
 ```
 
 A timestamped JSON artifact lands in `.memori/runs/` (gitignored).
@@ -192,11 +192,13 @@ A timestamped JSON artifact lands in `.memori/runs/` (gitignored).
 
 All tooling is driven through the Makefile so caches, paths, and flags stay consistent.
 
-| Target           | Description                                                           |
-| ---------------- | --------------------------------------------------------------------- |
-| `make env`       | Create `.venv` and install the package plus app/dev dependency groups |
-| `make clean`     | Remove `.venv`                                                        |
-| `make run`       | Alias for `make cli`                                                  |
-| `make cli`       | Start the interactive CLI                                             |
-| `make benchmark` | Run YAML scenarios in `benchmarks/`, writing JSON to `.memori/runs/`  |
-| `make tidy`      | `mypy`, `ruff check --fix`, `ruff format`, and `prettier --write`     |
+The installable library lives in [`memori/`](../memori). Local demo and bench code lives outside the package in [`tools/`](../tools), so the base package only exposes the public memory API.
+
+| Target       | Description                                                                     |
+| ------------ | ------------------------------------------------------------------------------- |
+| `make env`   | Create `.venv` and install the package plus app/dev dependency groups           |
+| `make clean` | Remove `.venv`                                                                  |
+| `make run`   | Alias for `make cli`                                                            |
+| `make cli`   | Start the interactive CLI                                                       |
+| `make bench` | Run YAML scenarios in `tools/bench/scenarios/`, writing JSON to `.memori/runs/` |
+| `make tidy`  | `mypy`, `ruff check --fix`, `ruff format`, and `prettier --write`               |

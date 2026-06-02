@@ -15,7 +15,13 @@ from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from memori.infra.env import require
-from memori.llm.prompts import SUMMARY_PROMPT
+
+
+SUMMARY_PROMPT = (
+    'Return JSON of shape {"summary": "<one or two sentences>"}. Write the summary '
+    "in the third person, focusing on what the user wanted and what was decided. "
+    "Skip greetings and small talk."
+)
 
 
 _agent: Agent[None, str] | None = None

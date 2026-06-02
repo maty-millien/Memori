@@ -15,9 +15,9 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Input, Static
 
 from memori import Memori
-from memori.cli.tui.widgets.turn import AssistantTurn, SystemTurn, UserTurn
-from memori.cli.tui.workers import run_chat
 from memori.domain.memory import Memory
+from cli.tui.widgets.turn import AssistantTurn, SystemTurn, UserTurn
+from cli.tui.workers import run_chat
 
 
 DB_PATH = ".memori"
