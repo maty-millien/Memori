@@ -1,196 +1,20 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any
 
-from bench.assertions import (
-    check_content,
-    check_memory_state,
-    check_retrieved,
-    check_tool_calls,
-    public_tool_name,
+from bench.assertions import check_memory_state
+from bench.models import ScenarioSpec
+from bench.session_runner import ProgressFn, run_session
+from bench.traces import (
+    ScenarioTrace,
+    SessionTrace,
+    memory_to_dict,
+    status_from_failures,
 )
-from bench.schema import MemorySpec, ScenarioSpec, SessionSpec
-from chat.chat import chat
 from memori import Memori
-from memori.domain.memory import Memory
-
-
-Status = Literal["passed", "failed", "error"]
-ProgressFn = Callable[[str], None]
-
-
-@dataclass
-class SessionTrace:
-    id: str
-    status: Status
-    elapsed_seconds: float
-    failures: list[str] = field(default_factory=list)
-    error: str | None = None
-    user_turns: list[str] = field(default_factory=list)
-    retrieved: list[dict[str, Any]] = field(default_factory=list)
-    recent_conversations: list[dict[str, Any]] = field(default_factory=list)
-    similar_conversations: list[dict[str, Any]] = field(default_factory=list)
-    tool_calls: list[dict[str, Any]] = field(default_factory=list)
-    answer: str = ""
-    recorded_summary: str = ""
-    final_memories: list[dict[str, Any]] = field(default_factory=list)
-    usage: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class ScenarioTrace:
-    id: str
-    description: str
-    status: Status
-    elapsed_seconds: float
-    failures: list[str] = field(default_factory=list)
-    error: str | None = None
-    sessions: list[SessionTrace] = field(default_factory=list)
-    final_memories: list[dict[str, Any]] = field(default_factory=list)
-
-
-def _memory_from_spec(spec: MemorySpec) -> Memory:
-    return Memory(
-        id=spec.id,
-        content=spec.content,
-        scope=spec.scope,
-        importance=spec.importance,
-    )
-
-
-def _memory_to_dict(memory: Memory) -> dict[str, Any]:
-    return {
-        "id": memory.id,
-        "content": memory.content,
-        "scope": memory.scope,
-        "kind": memory.kind,
-        "importance": memory.importance,
-        "created_at": memory.created_at.isoformat(),
-        "updated_at": memory.updated_at.isoformat(),
-        "last_accessed_at": (
-            memory.last_accessed_at.isoformat()
-            if memory.last_accessed_at is not None
-            else None
-        ),
-        "access_count": memory.access_count,
-    }
-
-
-def _usage_to_dict(usage: Any) -> dict[str, Any]:
-    if hasattr(usage, "model_dump"):
-        return dict(usage.model_dump())
-    if hasattr(usage, "__dict__"):
-        return dict(usage.__dict__)
-    return {}
-
-
-def _status(failures: list[str], error: str | None = None) -> Status:
-    if error is not None:
-        return "error"
-    return "failed" if failures else "passed"
-
-
-def _run_session(
-    memori: Memori, session: SessionSpec, progress: ProgressFn | None = None
-) -> SessionTrace:
-    start = time.monotonic()
-    failures: list[str] = []
-    error: str | None = None
-
-    try:
-        if session.initial_memories is not None:
-            if progress is not None:
-                progress(f"  RESET {session.id}")
-            memori.reset(
-                [_memory_from_spec(memory) for memory in session.initial_memories]
-            )
-
-        user_turns = [turn.content for turn in session.turns]
-        user_content = user_turns[-1]
-        if progress is not None:
-            progress(f"  RETRIEVE {session.id}")
-        context = memori.before_turn(user_content)
-        retrieved = context.retrieved
-        failures.extend(check_retrieved(retrieved, session.expected.retrieved))
-
-        if progress is not None:
-            progress(f"  CONVERSATIONS {session.id}")
-        recent = context.recent_conversations
-        similar = context.similar_conversations
-        if progress is not None:
-            progress(f"  CHAT {session.id}")
-        result = chat(
-            user_content,
-            context.memories,
-            recent,
-            similar,
-            memori=memori,
-        )
-        answer = str(result.assistant_message.get("content") or "")
-        failures.extend(check_tool_calls(result.tool_calls, session.expected))
-        failures.extend(check_content(answer, session.expected.answer, "answer"))
-
-        if session.record_summary:
-            if progress is not None:
-                progress(f"  SUMMARY {session.id}")
-            memori.after_turn(user_content, answer, result.tool_calls)
-            recorded_summary = memori.end_session()
-        else:
-            recorded_summary = ""
-
-        if progress is not None:
-            progress(f"  ASSERT {session.id}")
-        final_memories = memori.memories()
-        failures.extend(check_memory_state(final_memories, session.expected))
-        elapsed = time.monotonic() - start
-
-        return SessionTrace(
-            id=session.id,
-            status=_status(failures),
-            elapsed_seconds=elapsed,
-            failures=failures,
-            user_turns=user_turns,
-            retrieved=[
-                {
-                    "id": item.memory.id,
-                    "content": item.memory.content,
-                    "score": item.score,
-                    "reason": item.reason,
-                }
-                for item in retrieved
-            ],
-            recent_conversations=[_memory_to_dict(memory) for memory in recent],
-            similar_conversations=[_memory_to_dict(memory) for memory in similar],
-            tool_calls=[
-                {
-                    "name": public_tool_name(call.name),
-                    "arguments": call.arguments,
-                }
-                for call in result.tool_calls
-            ],
-            answer=answer,
-            recorded_summary=recorded_summary,
-            final_memories=[_memory_to_dict(memory) for memory in final_memories],
-            usage=_usage_to_dict(result.usage),
-        )
-    except Exception as exc:
-        error = f"{type(exc).__name__}: {exc}"
-        if progress is not None:
-            progress(f"  ERROR {session.id}: {error}")
-        return SessionTrace(
-            id=session.id,
-            status="error",
-            elapsed_seconds=time.monotonic() - start,
-            failures=failures,
-            error=error,
-            user_turns=[turn.content for turn in session.turns],
-            final_memories=[_memory_to_dict(memory) for memory in memori.memories()],
-        )
 
 
 def run_scenario(
@@ -199,10 +23,10 @@ def run_scenario(
     start = time.monotonic()
     memori = Memori.from_env()
     failures: list[str] = []
-    sessions: list[SessionTrace] = []
+    sessions = []
 
     for session in scenario.sessions:
-        trace = _run_session(memori, session, progress)
+        trace = run_session(memori, session, progress)
         sessions.append(trace)
         failures.extend(f"[{session.id}] {failure}" for failure in trace.failures)
         if trace.error is not None:
@@ -210,7 +34,7 @@ def run_scenario(
 
     final_memories = memori.memories()
     failures.extend(check_memory_state(final_memories, scenario.final_state))
-    status = _status(failures)
+    status = status_from_failures(failures)
     if any(session.status == "error" for session in sessions):
         status = "error"
 
@@ -221,17 +45,8 @@ def run_scenario(
         elapsed_seconds=time.monotonic() - start,
         failures=failures,
         sessions=sessions,
-        final_memories=[_memory_to_dict(memory) for memory in final_memories],
+        final_memories=[memory_to_dict(memory) for memory in final_memories],
     )
-
-
-def _run_scenario_in_process(scenario_data: dict[str, Any]) -> ScenarioTrace:
-    scenario = ScenarioSpec.model_validate(scenario_data)
-
-    def progress(line: str) -> None:
-        print(f"{scenario.id}: {line}", flush=True)
-
-    return run_scenario(scenario, progress)
 
 
 def run_suite(
@@ -278,51 +93,61 @@ def run_suite(
         if scenario.id in completed_traces_by_id
     ]
 
-    totals = {
-        "passed": sum(
-            1 for scenario in completed_traces if scenario.status == "passed"
-        ),
-        "failed": sum(
-            1 for scenario in completed_traces if scenario.status == "failed"
-        ),
-        "error": sum(1 for scenario in completed_traces if scenario.status == "error"),
-        "total": len(completed_traces),
-    }
     return {
         "started_at": started_at.isoformat(),
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "elapsed_seconds": time.monotonic() - start,
         "concurrency": concurrency,
-        "totals": totals,
-        "scenarios": [
-            {
-                "id": scenario.id,
-                "description": scenario.description,
-                "status": scenario.status,
-                "elapsed_seconds": scenario.elapsed_seconds,
-                "failures": scenario.failures,
-                "error": scenario.error,
-                "sessions": [
-                    {
-                        "id": session.id,
-                        "status": session.status,
-                        "elapsed_seconds": session.elapsed_seconds,
-                        "failures": session.failures,
-                        "error": session.error,
-                        "user_turns": session.user_turns,
-                        "retrieved": session.retrieved,
-                        "recent_conversations": session.recent_conversations,
-                        "similar_conversations": session.similar_conversations,
-                        "tool_calls": session.tool_calls,
-                        "answer": session.answer,
-                        "recorded_summary": session.recorded_summary,
-                        "final_memories": session.final_memories,
-                        "usage": session.usage,
-                    }
-                    for session in scenario.sessions
-                ],
-                "final_memories": scenario.final_memories,
-            }
-            for scenario in completed_traces
-        ],
+        "totals": _totals(completed_traces),
+        "scenarios": [_scenario_to_dict(scenario) for scenario in completed_traces],
+    }
+
+
+def _run_scenario_in_process(scenario_data: dict[str, Any]) -> ScenarioTrace:
+    scenario = ScenarioSpec.model_validate(scenario_data)
+
+    def progress(line: str) -> None:
+        print(f"{scenario.id}: {line}", flush=True)
+
+    return run_scenario(scenario, progress)
+
+
+def _totals(scenarios: list[ScenarioTrace]) -> dict[str, int]:
+    return {
+        "passed": sum(1 for scenario in scenarios if scenario.status == "passed"),
+        "failed": sum(1 for scenario in scenarios if scenario.status == "failed"),
+        "error": sum(1 for scenario in scenarios if scenario.status == "error"),
+        "total": len(scenarios),
+    }
+
+
+def _scenario_to_dict(scenario: ScenarioTrace) -> dict[str, Any]:
+    return {
+        "id": scenario.id,
+        "description": scenario.description,
+        "status": scenario.status,
+        "elapsed_seconds": scenario.elapsed_seconds,
+        "failures": scenario.failures,
+        "error": scenario.error,
+        "sessions": [_session_to_dict(session) for session in scenario.sessions],
+        "final_memories": scenario.final_memories,
+    }
+
+
+def _session_to_dict(session: SessionTrace) -> dict[str, Any]:
+    return {
+        "id": session.id,
+        "status": session.status,
+        "elapsed_seconds": session.elapsed_seconds,
+        "failures": session.failures,
+        "error": session.error,
+        "user_turns": session.user_turns,
+        "retrieved": session.retrieved,
+        "recent_conversations": session.recent_conversations,
+        "similar_conversations": session.similar_conversations,
+        "tool_calls": session.tool_calls,
+        "answer": session.answer,
+        "recorded_summary": session.recorded_summary,
+        "final_memories": session.final_memories,
+        "usage": session.usage,
     }

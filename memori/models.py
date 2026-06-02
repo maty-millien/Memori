@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 
 
 Scope = Literal["global", "topical"]
@@ -38,3 +38,33 @@ class Retrieved:
     memory: Memory
     score: float
     reason: str
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class MemoryTool:
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class SessionTurn:
+    role: str
+    content: str
+
+
+@dataclass(frozen=True)
+class MemoryContext:
+    user_message: str
+    prompt: str
+    retrieved: list[Retrieved]
+    memories: list[Memory]
+    recent_conversations: list[Memory]
+    similar_conversations: list[Memory]
+    history_message: str = ""

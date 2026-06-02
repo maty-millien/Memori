@@ -111,6 +111,7 @@ Retrieves relevant durable memories, recent conversation summaries, and similar 
 ```python
 context.user_message
 context.prompt
+context.history_message
 context.retrieved
 context.memories
 context.recent_conversations
@@ -158,7 +159,7 @@ The CLI is a development/demo app built on the same public `Memori` API. It is n
 
 ```sh
 make env
-make run
+make cli
 ```
 
 Commands:
@@ -187,6 +188,19 @@ A timestamped JSON artifact lands in `.memori/runs/` (gitignored).
 All tooling is driven through the Makefile so caches, paths, and flags stay consistent.
 
 The installable library lives in [`memori/`](../memori). Local demo and bench code lives outside the package in [`tools/`](../tools), so the base package only exposes the public memory API.
+
+Core library responsibilities are split by purpose:
+
+| Path                                                      | Responsibility                                  |
+| --------------------------------------------------------- | ----------------------------------------------- |
+| [`memori/client.py`](../memori/client.py)                 | Public `Memori` facade                          |
+| [`memori/models.py`](../memori/models.py)                 | Shared dataclasses and literal types            |
+| [`memori/config.py`](../memori/config.py)                 | Environment-backed settings                     |
+| [`memori/memory_service.py`](../memori/memory_service.py) | Retrieval, writes, reset, and summary recording |
+| [`memori/prompting.py`](../memori/prompting.py)           | Prompt and timestamp formatting                 |
+| [`memori/storage/`](../memori/storage)                    | Chroma persistence                              |
+| [`memori/providers/`](../memori/providers)                | OpenRouter provider/client code                 |
+| [`memori/summarization.py`](../memori/summarization.py)   | Session summary generation                      |
 
 | Target       | Description                                                                     |
 | ------------ | ------------------------------------------------------------------------------- |

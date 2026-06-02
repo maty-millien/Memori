@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from memori.domain.memory import Importance, Scope
+from memori import Importance, Scope
 
 
 class StrictModel(BaseModel):

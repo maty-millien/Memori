@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from bench.schema import (
+from bench.models import (
     ContentSpec,
     CountSpec,
     ExpectedSpec,
@@ -10,8 +10,8 @@ from bench.schema import (
     ToolArgumentsSpec,
     ToolCallSpec,
 )
-from chat.tools import DISPLAY_NAME, ToolCall
-from memori.domain.memory import Memory, Retrieved
+from chat.tool_adapter import DISPLAY_NAME
+from memori import Memory, Retrieved, ToolCall
 
 
 def public_tool_name(name: str) -> str:

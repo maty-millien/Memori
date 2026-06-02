@@ -6,7 +6,7 @@ from pydantic_ai.messages import ModelMessage
 from textual.app import App
 
 from memori import Memori
-from chat.chat import stream_chat
+from chat.loop import stream_chat
 from cli.tui.widgets.turn import AssistantTurn
 
 
@@ -30,10 +30,7 @@ def run_chat(
 
     try:
         result = stream_chat(
-            line,
-            context.memories,
-            context.recent_conversations,
-            context.similar_conversations,
+            context,
             history=history,
             memori=memori,
             on_reasoning=_on_reasoning,

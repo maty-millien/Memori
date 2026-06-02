@@ -1,5 +1,15 @@
-from memori.client import Memori, MemoryContext, MemoryTool, SessionTurn, ToolCall
-from memori.domain.memory import Importance, Kind, Memory, Retrieved, Scope
+from memori.client import Memori
+from memori.models import (
+    Importance,
+    Kind,
+    Memory,
+    MemoryContext,
+    MemoryTool,
+    Retrieved,
+    Scope,
+    SessionTurn,
+    ToolCall,
+)
 
 __all__ = [
     "Importance",

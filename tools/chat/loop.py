@@ -22,10 +22,8 @@ from pydantic_ai.messages import (
 from pydantic_ai.usage import RunUsage
 
 from chat.agent import build_agent, extract_text, model_settings
-from chat.tools import DISPLAY_NAME, Deps, ToolCall, extract_tool_calls
-from memori import Memori, Memory
-from memori.domain.engine import Engine
-from memori.llm.request import build_user_message, timestamped_user_content
+from chat.tool_adapter import DISPLAY_NAME, Deps, extract_tool_calls
+from memori import Memori, MemoryContext, ToolCall
 
 
 @dataclass
@@ -64,33 +62,22 @@ def _get_agent() -> Agent[Deps, str]:
 
 
 def chat(
-    user_content: str,
-    retrieved: list[Memory],
-    recent_conversations: list[Memory] | None = None,
-    similar_conversations: list[Memory] | None = None,
+    context: MemoryContext,
     history: list[ModelMessage] | None = None,
-    engine: Engine | None = None,
-    memori: Memori | None = None,
+    *,
+    memori: Memori,
 ) -> LLMResult:
-    timestamped_content = timestamped_user_content(user_content)
-    user_message = build_user_message(
-        timestamped_content,
-        retrieved,
-        recent_conversations,
-        similar_conversations,
-        add_timestamp=False,
-    )
     result = _get_agent().run_sync(
-        user_message,
-        deps=Deps(engine=engine, memori=memori),
+        context.prompt,
+        deps=Deps(memori=memori),
         message_history=history or [],
         model_settings=model_settings(),
     )
     new_messages = list(result.new_messages())
-    _strip_context_from_history(new_messages, timestamped_content)
+    _strip_context_from_history(new_messages, context.history_message)
     return LLMResult(
         tool_calls=extract_tool_calls(new_messages),
-        user_message=user_message,
+        user_message=context.prompt,
         assistant_message={"content": extract_text(new_messages), "reasoning": ""},
         new_messages=new_messages,
     )
@@ -164,40 +151,29 @@ async def _stream_async(
 
 
 def stream_chat(
-    user_content: str,
-    retrieved: list[Memory],
-    recent_conversations: list[Memory] | None = None,
-    similar_conversations: list[Memory] | None = None,
+    context: MemoryContext,
     history: list[ModelMessage] | None = None,
-    engine: Engine | None = None,
-    memori: Memori | None = None,
+    *,
+    memori: Memori,
     on_reasoning: Callable[[str], None] = _noop,
     on_content: Callable[[str], None] = _noop,
     on_tool: Callable[[str, dict[str, Any]], None] = lambda _n, _a: None,
 ) -> LLMResult:
-    timestamped_content = timestamped_user_content(user_content)
-    user_message = build_user_message(
-        timestamped_content,
-        retrieved,
-        recent_conversations,
-        similar_conversations,
-        add_timestamp=False,
-    )
     start = time.monotonic()
     new_messages, content, reasoning, usage = asyncio.run(
         _stream_async(
-            user_message,
+            context.prompt,
             history or [],
-            Deps(engine=engine, memori=memori),
+            Deps(memori=memori),
             on_reasoning,
             on_content,
             on_tool,
         )
     )
-    _strip_context_from_history(new_messages, timestamped_content)
+    _strip_context_from_history(new_messages, context.history_message)
     return LLMResult(
         tool_calls=extract_tool_calls(new_messages),
-        user_message=user_message,
+        user_message=context.prompt,
         assistant_message={"content": content, "reasoning": reasoning},
         new_messages=new_messages,
         usage=usage,

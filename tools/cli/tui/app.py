@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from datetime import datetime
-from typing import ClassVar
 
-from dotenv import load_dotenv
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.usage import RunUsage
 from textual import events
@@ -14,8 +11,10 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Input, Static
 
-from memori import Memori
-from memori.domain.memory import Memory
+from memori import Memori, Memory
+from cli.tui.commands import COMMANDS, HELP_TEXT, Command
+from cli.tui.styles import APP_CSS
+from cli.tui.widgets.command import CommandInput, CommandSuggestions
 from cli.tui.widgets.turn import AssistantTurn, SystemTurn, UserTurn
 from cli.tui.workers import run_chat
 
@@ -23,191 +22,10 @@ from cli.tui.workers import run_chat
 DB_PATH = ".memori"
 
 
-@dataclass(frozen=True)
-class Command:
-    name: str
-    description: str
-
-
-COMMANDS = [
-    Command("/new", "start a new session"),
-    Command("/clear", "start a new session"),
-    Command("/reset", "clear memories"),
-    Command("/memories", "list memories"),
-    Command("/help", "show help"),
-    Command("/quit", "exit"),
-]
-
-
-class CommandSuggestionRow(Static):
-    def __init__(self, command: Command, selected: bool) -> None:
-        super().__init__("", classes="command-suggestion-row")
-        self.command = command
-        self.set_class(selected, "selected")
-        self._render_command()
-
-    def set_selected(self, selected: bool) -> None:
-        self.set_class(selected, "selected")
-
-    def _render_command(self) -> None:
-        self.update(f"{self.command.name:<10} {self.command.description}")
-
-
-class CommandSuggestions(Vertical):
-    def __init__(self) -> None:
-        super().__init__(id="command-suggestions")
-        self.display = False
-
-    async def update_matches(self, matches: list[Command], selected_index: int) -> None:
-        self.remove_children()
-        self.display = bool(matches)
-        for index, command in enumerate(matches[:5]):
-            await self.mount(CommandSuggestionRow(command, index == selected_index))
-
-    def update_selection(self, selected_index: int) -> None:
-        for index, row in enumerate(self.query(CommandSuggestionRow)):
-            row.set_selected(index == selected_index)
-
-
-class CommandInput(Input):
-    BINDINGS: ClassVar = [
-        *Input.BINDINGS,
-        Binding("tab", "complete_command", show=False),
-        Binding("up", "previous_command", show=False),
-        Binding("down", "next_command", show=False),
-    ]
-
-    async def action_submit(self) -> None:
-        app = self.app
-        if isinstance(app, MemoriApp) and await app.complete_partial_command():
-            return
-        await super().action_submit()
-
-    async def action_complete_command(self) -> None:
-        app = self.app
-        if isinstance(app, MemoriApp):
-            await app.complete_selected_command()
-
-    def action_previous_command(self) -> None:
-        app = self.app
-        if isinstance(app, MemoriApp):
-            app.select_previous_command()
-
-    def action_next_command(self) -> None:
-        app = self.app
-        if isinstance(app, MemoriApp):
-            app.select_next_command()
-
-
 class MemoriApp(App):
     ansi_color = True
     ENABLE_COMMAND_PALETTE = False
-
-    CSS = """
-    Screen { background: ansi_default; color: ansi_default; }
-    #conversation { background: ansi_default; padding: 0 1; scrollbar-size: 0 0; }
-    .user-turn {
-        color: ansi_bright_cyan;
-        text-style: bold;
-        padding-top: 1;
-        background: ansi_default;
-    }
-    .system-turn {
-        color: ansi_bright_green;
-        text-style: italic;
-        padding-top: 1;
-        background: ansi_default;
-    }
-    .reasoning {
-        color: ansi_bright_black;
-        text-opacity: 70%;
-        text-style: italic;
-        background: ansi_default;
-        border-left: outer ansi_bright_black;
-        padding: 0 0 0 1;
-        margin: 0;
-    }
-    .tool-call {
-        color: ansi_bright_yellow;
-        background: ansi_default;
-        border-left: outer ansi_yellow;
-        padding: 0 0 0 1;
-        margin: 0 0 1 0;
-    }
-    .tool-call.after-text { margin: 1 0 1 0; }
-    .summarize {
-        color: ansi_bright_magenta;
-        background: ansi_default;
-        border-left: outer ansi_magenta;
-        padding: 0 0 0 1;
-        margin: 0;
-    }
-    .assistant-turn {
-        padding-bottom: 1;
-        margin-top: 1;
-        height: auto;
-        background: ansi_default;
-    }
-    .thinking-indicator {
-        height: 1;
-        width: 100%;
-        color: ansi_bright_black;
-        text-opacity: 80%;
-        text-style: italic;
-        background: ansi_default;
-        margin: 0;
-        padding: 0 0 0 1;
-    }
-    .thinking-indicator.after-stream { margin: 1 0 0 0; }
-    .assistant-content {
-        background: ansi_default;
-        color: ansi_default;
-        margin: 1 0 0 0;
-        padding: 0 0 0 1;
-        border-left: outer ansi_bright_blue;
-    }
-    #input-area {
-        dock: bottom;
-        height: auto;
-        background: ansi_default;
-    }
-    Input {
-        background: ansi_default;
-        color: ansi_default;
-        border: round ansi_bright_black;
-        padding: 0 1;
-        margin: 0 1 0 1;
-    }
-    Input:focus { border: round ansi_default; }
-    Input > .input--suggestion { color: ansi_bright_black; }
-    #command-suggestions {
-        height: auto;
-        max-height: 7;
-        margin: 0 1;
-        padding: 0 1;
-        border: round ansi_bright_black;
-        background: ansi_default;
-    }
-    .command-suggestion-row {
-        height: 1;
-        color: ansi_bright_black;
-        background: ansi_default;
-    }
-    .command-suggestion-row.selected {
-        color: ansi_default;
-        background: ansi_bright_blue;
-        text-style: bold;
-    }
-    #status-bar {
-        height: 1;
-        background: ansi_default;
-        color: ansi_bright_black;
-        padding: 0 2;
-        margin: 0 1 1 1;
-    }
-    #status-bar-left { width: 1fr; height: 1; content-align: left middle; }
-    #status-bar-right { width: 1fr; height: 1; content-align: right middle; }
-    """
+    CSS = APP_CSS
 
     BINDINGS = [
         Binding("ctrl+n", "new_session", "New"),
@@ -216,7 +34,6 @@ class MemoriApp(App):
 
     def __init__(self) -> None:
         super().__init__()
-        load_dotenv()
         self.memori = Memori.from_env(path=DB_PATH)
         self.turns: list[ModelMessage] = []
         self._last_input_tokens = 0
@@ -383,7 +200,7 @@ class MemoriApp(App):
                     await self._system(_format_memory_details(m))
             return
         if line == "/help":
-            await self._system("commands: /new /clear /reset /memories /quit")
+            await self._system(HELP_TEXT)
             return
 
         await self._say(line)

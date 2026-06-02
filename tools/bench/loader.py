@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from bench.schema import ScenarioSpec
+from bench.models import ScenarioSpec
 
 
 DEFAULT_BENCH_DIR = Path("tools") / "bench" / "scenarios"

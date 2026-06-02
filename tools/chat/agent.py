@@ -2,37 +2,33 @@ from __future__ import annotations
 
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
-from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
-from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.models.openai import OpenAIChatModelSettings
 
-from chat.prompts import SYSTEM_PROMPT
-from chat.tools import Deps, register
-from memori.infra.env import require
+from chat.system_prompt import SYSTEM_PROMPT
+from chat.tool_adapter import Deps, memory_tools
+from memori.config import Settings
+from memori.providers.openrouter import openrouter_chat_model
 
 
-def _build_model() -> OpenAIChatModel:
-    return OpenAIChatModel(
-        require("MEMORI_LLM_MODEL"),
-        provider=OpenAIProvider(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=require("OPENROUTER_API_KEY"),
-        ),
-    )
+def _settings() -> Settings:
+    return Settings.from_env()
 
 
 def model_settings() -> OpenAIChatModelSettings:
+    settings = _settings()
     return OpenAIChatModelSettings(
-        extra_body={"reasoning": {"effort": require("MEMORI_REASONING_EFFORT")}},
+        extra_body={"reasoning": {"effort": settings.reasoning_effort}},
     )
 
 
 def build_agent() -> Agent[Deps, str]:
+    settings = _settings()
     agent: Agent[Deps, str] = Agent(
-        _build_model(),
+        openrouter_chat_model(settings),
         deps_type=Deps,
         system_prompt=SYSTEM_PROMPT,
+        tools=memory_tools(),
     )
-    register(agent)
     return agent
 
 
