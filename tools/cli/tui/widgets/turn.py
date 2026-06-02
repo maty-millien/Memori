@@ -82,25 +82,37 @@ class AssistantTurn(Vertical):
         self._scroll_end()
 
     def append_content(self, s: str) -> None:
-        self._mark_stream_started()
-        if self._last_kind != "content":
+        if self._last_kind != "content" and self._content_widget is not None:
             self._content_buf = ""
+            self._content_widget = None
+        self._content_buf += s
+        rendered = self._content_buf.strip()
+        if not rendered:
+            return
+        self._mark_stream_started()
+        if self._content_widget is None:
             self._content_widget = Static("", classes="assistant-content", markup=False)
             self.mount(self._content_widget, before=self._thinking_widget)
-            self._last_kind = "content"
-        self._content_buf += s
+        self._last_kind = "content"
         assert self._content_widget is not None
-        self._content_widget.update(self._content_buf.strip())
+        self._content_widget.update(rendered)
         self._scroll_end()
 
     def append_tool(self, name: str, args: dict[str, Any]) -> None:
         self._mark_stream_started()
+        classes = (
+            "tool-call after-text"
+            if self._last_kind in {"content", "reasoning"}
+            else "tool-call"
+        )
         self.mount(
-            Static(_format_tool_inner(name, args), classes="tool-call"),
+            Static(_format_tool_inner(name, args), classes=classes),
             before=self._thinking_widget,
         )
         self._last_kind = "tool"
         self._reasoning_widget = None
+        self._content_widget = None
+        self._content_buf = ""
         self._scroll_end()
 
     def _scroll_end(self) -> None:

@@ -134,6 +134,7 @@ class MemoriApp(App):
         padding: 0 0 0 1;
         margin: 0 0 1 0;
     }
+    .tool-call.after-text { margin: 1 0 1 0; }
     .summarize {
         color: ansi_bright_magenta;
         background: ansi_default;
