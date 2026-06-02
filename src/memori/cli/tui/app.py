@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime
 from typing import ClassVar
 
 from dotenv import load_dotenv
@@ -16,6 +17,7 @@ from textual.widgets import Input, Static
 from memori import Memori
 from memori.cli.tui.widgets.turn import AssistantTurn, SystemTurn, UserTurn
 from memori.cli.tui.workers import run_chat
+from memori.domain.memory import Memory
 
 
 DB_PATH = ".memori"
@@ -130,7 +132,7 @@ class MemoriApp(App):
         background: ansi_default;
         border-left: outer ansi_yellow;
         padding: 0 0 0 1;
-        margin: 1 0;
+        margin: 0 0 1 0;
     }
     .summarize {
         color: ansi_bright_magenta;
@@ -367,7 +369,7 @@ class MemoriApp(App):
                 await self._system("(no memories)")
             else:
                 for m in mems:
-                    await self._system(f"{m.id} [{m.importance}]: {m.content}")
+                    await self._system(_format_memory_details(m))
             return
         if line == "/help":
             await self._system("commands: /new /clear /reset /memories /quit")
@@ -387,7 +389,7 @@ class MemoriApp(App):
     async def _save_session_with_indicator(self, done_text: str | None) -> None:
         if not self.turns:
             return
-        indicator = Static("⚡ Summarizing conversation…", classes="summarize")
+        indicator = Static("Summarizing conversation…", classes="summarize")
         await self.scroll.mount(indicator)
         self.scroll.scroll_end(animate=False)
         try:
@@ -425,3 +427,25 @@ class MemoriApp(App):
         if self.turns:
             await self._save_session_with_indicator(None)
         self.exit()
+
+
+def _format_memory_details(memory: Memory) -> str:
+    return "\n".join(
+        [
+            f"memory {memory.id}",
+            f"kind: {memory.kind}",
+            f"scope: {memory.scope}",
+            f"importance: {memory.importance}",
+            f"created_at: {memory.created_at.isoformat(timespec='seconds')}",
+            f"updated_at: {memory.updated_at.isoformat(timespec='seconds')}",
+            f"last_accessed_at: {_format_memory_datetime(memory.last_accessed_at)}",
+            f"access_count: {memory.access_count}",
+            f"content: {memory.content}",
+        ]
+    )
+
+
+def _format_memory_datetime(value: datetime | None) -> str:
+    if value is None:
+        return "never"
+    return value.isoformat(timespec="seconds")

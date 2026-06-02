@@ -51,7 +51,7 @@ class AssistantTurn(Vertical):
         self._scroll_end()
 
     def append_tool(self, name: str, args: dict[str, Any]) -> None:
-        self.mount(Static(f"⚡ {_format_tool_inner(name, args)}", classes="tool-call"))
+        self.mount(Static(_format_tool_inner(name, args), classes="tool-call"))
         self._last_kind = "tool"
         self._reasoning_widget = None
         self._scroll_end()
@@ -63,6 +63,13 @@ class AssistantTurn(Vertical):
 
 
 def _format_tool_inner(name: str, args: dict[str, Any]) -> str:
+    if name == "memory.upsert":
+        memory_id = args.get("memory_id")
+        if memory_id:
+            return "Updated memory"
+        return "Saved memory"
+    if name == "memory.delete":
+        return "Deleted memory"
     if not args:
         return name
     items = list(args.items())
