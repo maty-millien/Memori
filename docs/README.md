@@ -43,7 +43,7 @@ Memori currently uses OpenRouter for embeddings and session summarization. Creat
 
 ```ini
 OPENROUTER_API_KEY=sk-or-v1-...
-MEMORI_LLM_MODEL=deepseek/deepseek-v4-flash
+MEMORI_LLM_MODEL=moonshotai/kimi-k2.6
 MEMORI_REASONING_EFFORT=high
 MEMORI_EMBEDDING_MODEL=google/gemini-embedding-2
 ```

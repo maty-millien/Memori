@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from memori.domain.memory import Memory
-from memori.llm.humanize import humanize
 
 
 def _format_injected(memories: list[Memory]) -> str:
@@ -14,8 +13,16 @@ def _format_injected(memories: list[Memory]) -> str:
     )
 
 
+def _format_timestamp(ts: datetime) -> str:
+    if ts.tzinfo is None or ts.utcoffset() is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts.isoformat(timespec="seconds")
+
+
 def _format_conversations(memories: list[Memory]) -> str:
-    return "\n".join(f"- [{humanize(m.created_at)}] {m.content}" for m in memories)
+    return "\n".join(
+        f"- [{_format_timestamp(m.created_at)}] {m.content}" for m in memories
+    )
 
 
 def _wrap(tag: str, body: str) -> str:
