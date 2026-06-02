@@ -246,6 +246,9 @@ class MemoriApp(App):
         self.query_one(Input).focus()
         self._render_status()
 
+    def on_click(self, _event: events.Click) -> None:
+        self.query_one(Input).focus()
+
     def _render_status(self) -> None:
         total = self._last_input_tokens + self._last_output_tokens
         left = [
