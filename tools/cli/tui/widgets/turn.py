@@ -63,6 +63,9 @@ class AssistantTurn(Vertical):
         frame = self._THINKING_FRAMES[self._thinking_frame]
         self._thinking_widget.update(f"{frame} Thinking...")
 
+    def _mark_stream_started(self) -> None:
+        self._thinking_widget.set_class(True, "after-stream")
+
     def _ensure_reasoning(self) -> None:
         if self._reasoning_widget is None or self._last_kind != "reasoning":
             self._reasoning_buf = ""
@@ -71,6 +74,7 @@ class AssistantTurn(Vertical):
         self._last_kind = "reasoning"
 
     def append_reasoning(self, s: str) -> None:
+        self._mark_stream_started()
         self._ensure_reasoning()
         self._reasoning_buf += s
         assert self._reasoning_widget is not None
@@ -78,6 +82,7 @@ class AssistantTurn(Vertical):
         self._scroll_end()
 
     def append_content(self, s: str) -> None:
+        self._mark_stream_started()
         if self._last_kind != "content":
             self._content_buf = ""
             self._content_widget = Static("", classes="assistant-content", markup=False)
@@ -89,6 +94,7 @@ class AssistantTurn(Vertical):
         self._scroll_end()
 
     def append_tool(self, name: str, args: dict[str, Any]) -> None:
+        self._mark_stream_started()
         self.mount(
             Static(_format_tool_inner(name, args), classes="tool-call"),
             before=self._thinking_widget,

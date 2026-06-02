@@ -154,9 +154,10 @@ class MemoriApp(App):
         text-opacity: 80%;
         text-style: italic;
         background: ansi_default;
-        margin: 1 0 0 0;
+        margin: 0;
         padding: 0 0 0 1;
     }
+    .thinking-indicator.after-stream { margin: 1 0 0 0; }
     .assistant-content {
         background: ansi_default;
         color: ansi_default;
