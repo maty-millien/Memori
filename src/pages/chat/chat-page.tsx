@@ -104,12 +104,12 @@ export function ChatPage({
   }
 
   return (
-    <div className="flex h-svh flex-col">
-      <PageHeader />
+    <div className="relative flex h-svh flex-col">
+      <PageHeader className="absolute inset-x-0 top-0 z-10" />
       <MessageScrollerProvider autoScroll>
         <MessageScroller className="flex-1">
-          <MessageScrollerViewport>
-            <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-10 px-6 pt-4 pb-10">
+          <MessageScrollerViewport className="[--scroll-fade-t-size:--spacing(16)]">
+            <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-10 px-6 pt-18 pb-10">
               {messages.map((message) => (
                 <MessageScrollerItem
                   key={message.id}
@@ -134,7 +134,7 @@ export function ChatPage({
               ) : null}
             </MessageScrollerContent>
           </MessageScrollerViewport>
-          <MessageScrollerButton />
+          <MessageScrollerButton className="rounded-full border-input bg-popover shadow-xs backdrop-blur-xl" />
         </MessageScroller>
       </MessageScrollerProvider>
       <div className="mx-auto w-full max-w-3xl">{composer}</div>

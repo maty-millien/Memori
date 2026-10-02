@@ -7,7 +7,6 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import { AppSidebar } from "@/shared/components/app-sidebar";
 import { Button } from "@/shared/components/ui/button";
 import {
   Empty,
@@ -16,7 +15,6 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/shared/components/ui/empty";
-import { SidebarInset, SidebarProvider } from "@/shared/components/ui/sidebar";
 import { TooltipProvider } from "@/shared/components/ui/tooltip";
 
 import appCss from "../global.css?url";
@@ -55,12 +53,7 @@ function RootDocument({ children }: { children: ReactNode }) {
 function RootLayout() {
   return (
     <TooltipProvider>
-      <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset className="min-w-0">
-          <Outlet />
-        </SidebarInset>
-      </SidebarProvider>
+      <Outlet />
     </TooltipProvider>
   );
 }
