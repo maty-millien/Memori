@@ -19,14 +19,15 @@ import type { ChatSettings, MemoriUIMessage } from "@/shared/lib/memori";
 
 import { AssistantTurn } from "./assistant-turn";
 import { Composer } from "./composer";
-import { StatusMarker } from "./trace-marker";
 import { UserTurn } from "./user-turn";
 
 function contextTokens(messages: MemoriUIMessage[]) {
   for (const message of messages.toReversed()) {
     for (const part of message.parts) {
       if (part.type === "data-usage") {
-        return part.data.chat.inputTokens + part.data.chat.outputTokens;
+        return (
+          part.data.context ?? part.data.chat.inputTokens + part.data.chat.outputTokens
+        );
       }
     }
   }
@@ -127,11 +128,6 @@ export function ChatPage({
                   )}
                 </MessageScrollerItem>
               ))}
-              {status === "submitted" ? (
-                <MessageScrollerItem messageId="pending">
-                  <StatusMarker label="Retrieving memories" />
-                </MessageScrollerItem>
-              ) : null}
             </MessageScrollerContent>
           </MessageScrollerViewport>
           <MessageScrollerButton className="rounded-full border-input bg-popover shadow-xs backdrop-blur-xl" />

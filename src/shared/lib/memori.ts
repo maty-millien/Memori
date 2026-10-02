@@ -76,12 +76,14 @@ export type CallUsage = {
 type MemoriData = {
   retrieval: { memories: RetrievedMemory[]; recent: Memory[]; similar: Memory[] };
   prompt: { prompt: string };
+  thought: { ms: number };
   curation: { startedAt: string; prompt?: string };
   compaction: { episodeId: string; summary: string; messageCount: number };
   usage: {
     retrievalMs: number;
     chat: CallUsage;
     curation: CallUsage | null;
+    context?: number;
     chatModel?: ChatModel;
     chatEffort?: ReasoningEffort;
   };
@@ -97,9 +99,12 @@ export type MemoryUpsertInput = {
 
 export type MemoryDeleteInput = { memory_id: string };
 
+export type ShellOutput = { exitCode: number; stdout: string; stderr: string };
+
 type MemoriTools = {
   memory_upsert: { input: MemoryUpsertInput; output: string };
   memory_delete: { input: MemoryDeleteInput; output: string };
+  shell: { input: { command: string }; output: ShellOutput };
 };
 
 export type MemoriUIMessage = UIMessage<{ createdAt: string }, MemoriData, MemoriTools>;

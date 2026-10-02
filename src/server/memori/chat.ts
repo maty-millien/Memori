@@ -4,6 +4,8 @@ import {
   type FilePart,
   type LanguageModelUsage,
   type ModelMessage,
+  type TextPart,
+  type ToolCallPart,
 } from "ai";
 
 import {
@@ -49,14 +51,55 @@ function callUsage(
   };
 }
 
+function assistantMessages(message: MemoriUIMessage): ModelMessage[] {
+  const messages: ModelMessage[] = [];
+  let content: (TextPart | ToolCallPart)[] = [];
+  for (const part of message.parts) {
+    if (part.type === "text" && part.text.trim()) {
+      content.push({ type: "text", text: part.text });
+    }
+    if (part.type === "tool-shell" && part.state === "output-available") {
+      const { toolCallId, input, output } = part;
+      messages.push(
+        {
+          role: "assistant",
+          content: [
+            ...content,
+            { type: "tool-call", toolCallId, toolName: "shell", input },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId,
+              toolName: "shell",
+              output: {
+                type: "text",
+                value: `Exit code ${output.exitCode}. Output not kept in history.`,
+              },
+            },
+          ],
+        },
+      );
+      content = [];
+    }
+  }
+  if (content.length > 0) {
+    messages.push({ role: "assistant", content });
+  }
+  return messages;
+}
+
 function historyMessages(history: MemoriUIMessage[]): ModelMessage[] {
   return history.flatMap((message): ModelMessage[] => {
+    if (message.role !== "user") {
+      return assistantMessages(message);
+    }
     const content = historyContent(message);
     if (!content) {
       return [];
-    }
-    if (message.role !== "user") {
-      return [{ role: "assistant", content }];
     }
     const files = message.parts.flatMap((part): FilePart[] =>
       part.type === "file"
@@ -131,22 +174,35 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
           },
         ],
       });
+      let stepStarted: number | null = null;
       for await (const chunk of chat.toUIMessageStream<MemoriUIMessage>({
         sendStart: false,
         sendFinish: false,
         onError: errorMessage,
       })) {
+        if (chunk.type === "start-step") {
+          stepStarted = performance.now();
+        }
+        if (
+          stepStarted !== null &&
+          (chunk.type === "text-start" || chunk.type === "tool-input-start")
+        ) {
+          writer.write({
+            type: "data-thought",
+            data: { ms: Math.round(performance.now() - stepStarted) },
+          });
+          stepStarted = null;
+        }
         writer.write(chunk);
         if (chunk.type === "error") {
           return;
         }
       }
       const reply = await chat.text;
-      const chatUsage = callUsage(
-        await chat.totalUsage,
-        (await chat.steps).length,
-        chatStarted,
-      );
+      const steps = await chat.steps;
+      const chatUsage = callUsage(await chat.totalUsage, steps.length, chatStarted);
+      const lastUsage = steps.at(-1)?.usage;
+      const context = (lastUsage?.inputTokens ?? 0) + (lastUsage?.outputTokens ?? 0);
 
       const curationPrompt = [
         wrap(
@@ -189,10 +245,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
         writer.write({ type: "data-error", data: { message: errorMessage(error) } });
       }
 
-      if (
-        chatUsage.inputTokens + chatUsage.outputTokens >
-        SETTINGS.episodeThreshold * CONTEXT_WINDOW
-      ) {
+      if (context > SETTINGS.episodeThreshold * CONTEXT_WINDOW) {
         try {
           const episode = await createEpisode(history);
           if (episode) {
@@ -209,6 +262,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
           retrievalMs,
           chat: chatUsage,
           curation: curationUsage,
+          context,
           chatModel: chatSettings.model,
           chatEffort: chatSettings.effort,
         },

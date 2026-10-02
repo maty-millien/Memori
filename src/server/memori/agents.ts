@@ -11,10 +11,12 @@ import {
 } from "./codex";
 import { memoryTools } from "./memory-tools";
 import { CHAT_PROMPT, CURATION_PROMPT, SUMMARY_PROMPT } from "./prompts";
+import { shellTool } from "./shell-tool";
 
 export const chatAgent = new ToolLoopAgent({
   model: codexModel,
   instructions: CHAT_PROMPT,
+  tools: { shell: shellTool },
   callOptionsSchema: z.object({
     model: z.enum(CHAT_MODEL_IDS),
     effort: z.enum(REASONING_EFFORTS),
