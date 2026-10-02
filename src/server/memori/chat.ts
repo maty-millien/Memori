@@ -1,8 +1,6 @@
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
-  stepCountIs,
-  streamText,
   type FilePart,
   type LanguageModelUsage,
   type ModelMessage,
@@ -15,25 +13,18 @@ import {
   type MemoriUIMessage,
 } from "@/shared/lib/memori";
 
-import {
-  chatProviderOptions,
-  codexChatModel,
-  codexModel,
-  codexProviderOptions,
-} from "./codex";
+import { chatAgent, curationAgent } from "./agents";
 import { SETTINGS } from "./config";
 import { getChatSettings, listLiveMessages, saveMessage } from "./db";
 import { embedOne } from "./embeddings";
 import { createEpisode } from "./episodes";
 import { errorMessage } from "./errors";
-import { memoryTools } from "./memory-tools";
 import {
   buildContextPrompt,
   formatMemories,
   timestampedUserContent,
   wrap,
 } from "./prompting";
-import { CHAT_PROMPT, CURATION_PROMPT } from "./prompts";
 import { retrieve } from "./retrieval";
 import { historyContent, transcript, userBody } from "./transcript";
 import { readUpload, saveUpload } from "./uploads";
@@ -122,10 +113,8 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
       writer.write({ type: "data-prompt", data: { prompt } });
 
       const chatStarted = performance.now();
-      const chat = streamText({
-        model: codexChatModel(chatSettings.model),
-        providerOptions: chatProviderOptions(chatSettings.effort),
-        system: CHAT_PROMPT,
+      const chat = await chatAgent.stream({
+        options: chatSettings,
         messages: [
           ...historyMessages(history),
           {
@@ -178,14 +167,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
       const curationStarted = performance.now();
       let curationUsage: CallUsage | null = null;
       try {
-        const curation = streamText({
-          model: codexModel,
-          providerOptions: codexProviderOptions,
-          system: CURATION_PROMPT,
-          prompt: curationPrompt,
-          tools: memoryTools,
-          stopWhen: stepCountIs(5),
-        });
+        const curation = await curationAgent.stream({ prompt: curationPrompt });
         for await (const chunk of curation.toUIMessageStream<MemoriUIMessage>({
           sendStart: false,
           sendFinish: false,

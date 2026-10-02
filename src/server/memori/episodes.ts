@@ -1,9 +1,18 @@
 import type { MemoriUIMessage } from "@/shared/lib/memori";
 
+import { summaryAgent } from "./agents";
 import { assignEpisode, insertMemory } from "./db";
 import { embedOne } from "./embeddings";
-import { summarize } from "./summarization";
 import { transcript } from "./transcript";
+
+async function summarize(conversation: string) {
+  if (!conversation) {
+    return "";
+  }
+  const result = await summaryAgent.stream({ prompt: conversation });
+  const { summary } = await result.output;
+  return summary.trim();
+}
 
 export async function createEpisode(history: MemoriUIMessage[]) {
   const cut = history.findIndex(
