@@ -5,11 +5,12 @@ import {
   IconPhoto,
   IconX,
 } from "@tabler/icons-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Spinner } from "@/shared/components/ui/spinner";
 import { ATTACHMENT_TYPES, type ChatSettings } from "@/shared/lib/memori";
+import { cn } from "@/shared/lib/utils";
 
 import { ContextRing } from "./context-ring";
 import { ModelMenu } from "./model-menu";
@@ -29,8 +30,40 @@ export function Composer({
 }) {
   const [value, setValue] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const form = useRef<HTMLFormElement>(null);
   const empty = !value.trim() && files.length === 0;
+
+  useEffect(() => {
+    const element = form.current;
+    const controller = new AbortController();
+    function over(event: DragEvent) {
+      if (event.dataTransfer?.types.includes("Files")) {
+        event.preventDefault();
+        setDragging(true);
+      }
+    }
+    function leave(event: DragEvent) {
+      if (
+        !(event.relatedTarget instanceof Node && element?.contains(event.relatedTarget))
+      ) {
+        setDragging(false);
+      }
+    }
+    function drop(event: DragEvent) {
+      event.preventDefault();
+      setDragging(false);
+      const dropped = Array.from(event.dataTransfer?.files ?? []).filter((file) =>
+        (ATTACHMENT_TYPES as readonly string[]).includes(file.type),
+      );
+      setFiles((current) => [...current, ...dropped]);
+    }
+    element?.addEventListener("dragover", over, controller);
+    element?.addEventListener("dragleave", leave, controller);
+    element?.addEventListener("drop", drop, controller);
+    return () => controller.abort();
+  }, []);
 
   function submit() {
     if (empty || busy) {
@@ -43,7 +76,11 @@ export function Composer({
 
   return (
     <form
-      className="cursor-text rounded-3xl border border-input bg-popover pt-1 shadow-xs backdrop-blur-xl"
+      ref={form}
+      className={cn(
+        "cursor-text rounded-3xl border border-input bg-popover pt-1 shadow-xs backdrop-blur-xl",
+        dragging && "ring-2 ring-ring",
+      )}
       onSubmit={(event) => {
         event.preventDefault();
         submit();
