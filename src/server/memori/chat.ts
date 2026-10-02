@@ -1,12 +1,4 @@
-import {
-  createUIMessageStream,
-  createUIMessageStreamResponse,
-  type FilePart,
-  type LanguageModelUsage,
-  type ModelMessage,
-  type TextPart,
-  type ToolCallPart,
-} from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
 import {
   CONTEXT_WINDOW,
@@ -15,21 +7,22 @@ import {
   type MemoriUIMessage,
 } from "@/shared/lib/memori";
 
-import { chatAgent, curationAgent } from "./agents";
+import { runCodex, type CodexUsage } from "./codex";
 import { SETTINGS } from "./config";
+import { curate } from "./curation";
 import { getChatSettings, listLiveMessages, saveMessage } from "./db";
 import { embedOne } from "./embeddings";
 import { createEpisode } from "./episodes";
-import { errorMessage } from "./errors";
 import {
   buildContextPrompt,
   formatMemories,
   timestampedUserContent,
   wrap,
 } from "./prompting";
+import { CHAT_PROMPT } from "./prompts";
 import { retrieve } from "./retrieval";
-import { historyContent, transcript, userBody } from "./transcript";
-import { readUpload, saveUpload } from "./uploads";
+import { transcript, userContent } from "./transcript";
+import { saveUpload, uploadPath } from "./uploads";
 
 export type Attachment = {
   bytes: Uint8Array;
@@ -37,84 +30,19 @@ export type Attachment = {
   filename: string;
 };
 
-function callUsage(
-  usage: LanguageModelUsage,
-  requests: number,
-  started: number,
-): CallUsage {
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const unwrapShell = (command: string) =>
+  /^\/bin\/zsh -lc (['"])([\s\S]*)\1$/.exec(command)?.[2] ?? command;
+
+function callUsage(usage: CodexUsage, ms: number): CallUsage {
   return {
-    inputTokens: usage.inputTokens ?? 0,
-    outputTokens: usage.outputTokens ?? 0,
-    reasoningTokens: usage.outputTokenDetails?.reasoningTokens ?? 0,
-    requests,
-    ms: Math.round(performance.now() - started),
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    reasoningTokens: usage.reasoning_output_tokens,
+    ms,
   };
-}
-
-function assistantMessages(message: MemoriUIMessage): ModelMessage[] {
-  const messages: ModelMessage[] = [];
-  let content: (TextPart | ToolCallPart)[] = [];
-  for (const part of message.parts) {
-    if (part.type === "text" && part.text.trim()) {
-      content.push({ type: "text", text: part.text });
-    }
-    if (part.type === "tool-shell" && part.state === "output-available") {
-      const { toolCallId, input, output } = part;
-      messages.push(
-        {
-          role: "assistant",
-          content: [
-            ...content,
-            { type: "tool-call", toolCallId, toolName: "shell", input },
-          ],
-        },
-        {
-          role: "tool",
-          content: [
-            {
-              type: "tool-result",
-              toolCallId,
-              toolName: "shell",
-              output: {
-                type: "text",
-                value: `Exit code ${output.exitCode}. Output not kept in history.`,
-              },
-            },
-          ],
-        },
-      );
-      content = [];
-    }
-  }
-  if (content.length > 0) {
-    messages.push({ role: "assistant", content });
-  }
-  return messages;
-}
-
-function historyMessages(history: MemoriUIMessage[]): ModelMessage[] {
-  return history.flatMap((message): ModelMessage[] => {
-    if (message.role !== "user") {
-      return assistantMessages(message);
-    }
-    const content = historyContent(message);
-    if (!content) {
-      return [];
-    }
-    const files = message.parts.flatMap((part): FilePart[] =>
-      part.type === "file"
-        ? [
-            {
-              type: "file",
-              data: readUpload(part.url),
-              mediaType: part.mediaType,
-              filename: part.filename,
-            },
-          ]
-        : [],
-    );
-    return [{ role: "user", content: [{ type: "text", text: content }, ...files] }];
-  });
 }
 
 export function chatResponse(messageId: string, text: string, files: Attachment[]) {
@@ -124,13 +52,17 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
   const userMessage: MemoriUIMessage = {
     id: messageId,
     role: "user",
-    parts: [{ type: "text", text }],
+    parts: [
+      ...files.map((file) => ({
+        type: "file" as const,
+        mediaType: file.mediaType,
+        filename: file.filename,
+        url: saveUpload(file.bytes, file.mediaType),
+      })),
+      ...(text ? [{ type: "text" as const, text }] : []),
+    ],
     metadata: { createdAt: createdAt.toISOString() },
   };
-  const body = userBody(
-    text,
-    files.map((file) => file.filename),
-  );
   let completed = false;
 
   const stream = createUIMessageStream<MemoriUIMessage>({
@@ -139,15 +71,16 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
     execute: async ({ writer }) => {
       writer.write({ type: "start" });
 
+      const body = userContent(userMessage);
       const retrievalStarted = performance.now();
       const { live, ...retrieval } = retrieve(
         await embedOne(body),
         history[0]?.metadata?.createdAt,
       );
       const retrievalMs = Math.round(performance.now() - retrievalStarted);
-      const userContent = timestampedUserContent(body, createdAt);
+      const current = timestampedUserContent(body, createdAt);
       const prompt = buildContextPrompt(
-        userContent,
+        current,
         retrieval.memories.map((item) => item.memory),
         retrieval.recent,
         retrieval.similar,
@@ -155,54 +88,84 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
       writer.write({ type: "data-retrieval", data: retrieval });
       writer.write({ type: "data-prompt", data: { prompt } });
 
+      const fullPrompt = [
+        history.length > 0 ? wrap("conversation_history", transcript(history)) : "",
+        prompt,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
       const chatStarted = performance.now();
-      const chat = await chatAgent.stream({
-        options: chatSettings,
-        messages: [
-          ...historyMessages(history),
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              ...files.map((file): FilePart => ({
-                type: "file",
-                data: file.bytes,
-                mediaType: file.mediaType,
-                filename: file.filename,
-              })),
-            ],
-          },
-        ],
-      });
-      let stepStarted: number | null = null;
-      for await (const chunk of chat.toUIMessageStream<MemoriUIMessage>({
-        sendStart: false,
-        sendFinish: false,
-        onError: errorMessage,
-      })) {
-        if (chunk.type === "start-step") {
-          stepStarted = performance.now();
-        }
-        if (
-          stepStarted !== null &&
-          (chunk.type === "text-start" || chunk.type === "tool-input-start")
-        ) {
+      let since: number | null = chatStarted;
+      const thought = () => {
+        if (since !== null) {
           writer.write({
             type: "data-thought",
-            data: { ms: Math.round(performance.now() - stepStarted) },
+            data: { ms: Math.round(performance.now() - since) },
           });
-          stepStarted = null;
+          since = null;
         }
-        writer.write(chunk);
-        if (chunk.type === "error") {
-          return;
-        }
-      }
-      const reply = await chat.text;
-      const steps = await chat.steps;
-      const chatUsage = callUsage(await chat.totalUsage, steps.length, chatStarted);
-      const lastUsage = steps.at(-1)?.usage;
-      const context = (lastUsage?.inputTokens ?? 0) + (lastUsage?.outputTokens ?? 0);
+      };
+      const chat = await runCodex({
+        name: "chat",
+        instructions: CHAT_PROMPT,
+        prompt: fullPrompt,
+        model: chatSettings.model,
+        effort: chatSettings.effort,
+        webSearch: true,
+        images: userMessage.parts.flatMap((part) =>
+          part.type === "file" && part.mediaType.startsWith("image/")
+            ? [uploadPath(part.url)]
+            : [],
+        ),
+        onEvent: (event) => {
+          if (event.type !== "item.started" && event.type !== "item.completed") {
+            return;
+          }
+          const { item } = event;
+          const done = event.type === "item.completed";
+          if (item.type === "reasoning" && done) {
+            writer.write({ type: "reasoning-start", id: item.id });
+            writer.write({ type: "reasoning-delta", id: item.id, delta: item.text });
+            writer.write({ type: "reasoning-end", id: item.id });
+          }
+          if (item.type === "agent_message" && done) {
+            thought();
+            writer.write({ type: "text-start", id: item.id });
+            writer.write({ type: "text-delta", id: item.id, delta: item.text });
+            writer.write({ type: "text-end", id: item.id });
+            since = performance.now();
+          }
+          if (item.type === "command_execution") {
+            thought();
+            writer.write({
+              type: "data-command",
+              id: item.id,
+              data: {
+                command: unwrapShell(item.command),
+                running: !done,
+                exitCode: item.exit_code ?? null,
+                output: item.aggregated_output.slice(-20_000),
+              },
+            });
+          }
+          if (item.type === "web_search") {
+            thought();
+            writer.write({
+              type: "data-search",
+              id: item.id,
+              data: { query: item.query, running: !done },
+            });
+          }
+          if (done && item.type !== "reasoning" && item.type !== "agent_message") {
+            since = performance.now();
+          }
+        },
+      });
+      const chatUsage = callUsage(
+        chat.usage,
+        Math.round(performance.now() - chatStarted),
+      );
+      const context = Math.round(fullPrompt.length / 4) + chatUsage.outputTokens;
 
       const curationPrompt = [
         wrap(
@@ -214,33 +177,16 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
           "recent_history",
           transcript(history.slice(-SETTINGS.curationHistoryMessages)) || "(none)",
         ),
-        wrap("latest_turn", `user: ${userContent}\nassistant: ${reply}`),
+        wrap("latest_turn", `user: ${current}\nassistant: ${chat.text}`),
       ].join("\n\n");
-      writer.write({
-        type: "data-curation",
-        data: { startedAt: new Date().toISOString(), prompt: curationPrompt },
-      });
-      const curationStarted = performance.now();
       let curationUsage: CallUsage | null = null;
       try {
-        const curation = await curationAgent.stream({ prompt: curationPrompt });
-        for await (const chunk of curation.toUIMessageStream<MemoriUIMessage>({
-          sendStart: false,
-          sendFinish: false,
-          onError: errorMessage,
-        })) {
-          if (chunk.type === "error") {
-            throw new Error(chunk.errorText);
-          }
-          if (!chunk.type.startsWith("text-")) {
-            writer.write(chunk);
-          }
-        }
-        curationUsage = callUsage(
-          await curation.totalUsage,
-          (await curation.steps).length,
-          curationStarted,
-        );
+        const curation = await curate(curationPrompt);
+        curationUsage = callUsage(curation.usage, curation.ms);
+        writer.write({
+          type: "data-curation",
+          data: { prompt: curationPrompt, operations: curation.operations },
+        });
       } catch (error) {
         writer.write({ type: "data-error", data: { message: errorMessage(error) } });
       }
@@ -274,18 +220,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
       if (!completed) {
         return;
       }
-      saveMessage({
-        ...userMessage,
-        parts: [
-          ...files.map((file) => ({
-            type: "file" as const,
-            mediaType: file.mediaType,
-            filename: file.filename,
-            url: saveUpload(file.bytes, file.mediaType),
-          })),
-          ...(text ? userMessage.parts : []),
-        ],
-      });
+      saveMessage(userMessage);
       saveMessage({
         ...responseMessage,
         metadata: { createdAt: new Date().toISOString() },

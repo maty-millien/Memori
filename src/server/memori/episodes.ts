@@ -1,25 +1,26 @@
 import type { MemoriUIMessage } from "@/shared/lib/memori";
 
-import { summaryAgent } from "./agents";
+import { runCodex } from "./codex";
 import { assignEpisode, insertMemory } from "./db";
 import { embedOne } from "./embeddings";
+import { SUMMARY_PROMPT } from "./prompts";
 import { transcript } from "./transcript";
-
-async function summarize(conversation: string) {
-  if (!conversation) {
-    return "";
-  }
-  const result = await summaryAgent.stream({ prompt: conversation });
-  const { summary } = await result.output;
-  return summary.trim();
-}
 
 export async function createEpisode(history: MemoriUIMessage[]) {
   const cut = history.findIndex(
     (message, index) => index >= history.length / 2 && message.role === "user",
   );
   const messages = history.slice(0, cut === -1 ? history.length : cut);
-  const summary = await summarize(transcript(messages));
+  const conversation = transcript(messages);
+  if (!conversation) {
+    return null;
+  }
+  const { text } = await runCodex({
+    name: "summary",
+    instructions: SUMMARY_PROMPT,
+    prompt: conversation,
+  });
+  const summary = text.trim();
   if (!summary) {
     return null;
   }

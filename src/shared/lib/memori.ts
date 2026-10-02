@@ -69,15 +69,25 @@ export type CallUsage = {
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
-  requests: number;
   ms: number;
+};
+
+export type MemoryOperation = {
+  action: "upsert" | "delete";
+  memory_id: string | null;
+  content: string | null;
+  scope: Scope | null;
+  importance: Importance | null;
+  result: string;
 };
 
 type MemoriData = {
   retrieval: { memories: RetrievedMemory[]; recent: Memory[]; similar: Memory[] };
   prompt: { prompt: string };
   thought: { ms: number };
-  curation: { startedAt: string; prompt?: string };
+  command: { command: string; running: boolean; exitCode: number | null; output: string };
+  search: { query: string; running: boolean };
+  curation: { prompt: string; operations: MemoryOperation[] };
   compaction: { episodeId: string; summary: string; messageCount: number };
   usage: {
     retrievalMs: number;
@@ -90,21 +100,4 @@ type MemoriData = {
   error: { message: string };
 };
 
-export type MemoryUpsertInput = {
-  content: string;
-  memory_id?: string | null;
-  scope?: Scope;
-  importance?: Importance;
-};
-
-export type MemoryDeleteInput = { memory_id: string };
-
-export type ShellOutput = { exitCode: number; stdout: string; stderr: string };
-
-type MemoriTools = {
-  memory_upsert: { input: MemoryUpsertInput; output: string };
-  memory_delete: { input: MemoryDeleteInput; output: string };
-  shell: { input: { command: string }; output: ShellOutput };
-};
-
-export type MemoriUIMessage = UIMessage<{ createdAt: string }, MemoriData, MemoriTools>;
+export type MemoriUIMessage = UIMessage<{ createdAt: string }, MemoriData>;

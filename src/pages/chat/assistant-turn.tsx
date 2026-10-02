@@ -1,4 +1,5 @@
-import { IconBrain, IconTerminal2 } from "@tabler/icons-react";
+import { IconBrain, IconTerminal2, IconWorldSearch } from "@tabler/icons-react";
+import type { ReactNode } from "react";
 
 import { Markdown } from "@/shared/components/markdown";
 import { Bubble, BubbleContent } from "@/shared/components/ui/bubble";
@@ -10,71 +11,44 @@ import { CopyButton } from "./copy-button";
 import { DebugDialog } from "./debug-dialog";
 import { StatusMarker } from "./trace-marker";
 
-type Item =
-  | { key: string; kind: "text"; text: string }
-  | { key: string; kind: "thought"; ms: number }
-  | { key: string; kind: "shell"; command: string; done: boolean };
+type Part = MemoriUIMessage["parts"][number];
 
-function timeline(message: MemoriUIMessage) {
-  const items: Item[] = [];
-  for (const [index, part] of message.parts.entries()) {
-    if (part.type === "data-curation") {
-      break;
-    }
-    const last = items.at(-1);
-    if (part.type === "text") {
-      if (last?.kind === "text") {
-        last.text += `\n\n${part.text}`;
-      } else {
-        items.push({ key: `text-${index}`, kind: "text", text: part.text });
-      }
-    }
-    if (part.type === "data-thought") {
-      items.push({ key: `thought-${index}`, kind: "thought", ms: part.data.ms });
-    }
-    if (part.type === "tool-shell") {
-      items.push({
-        key: part.toolCallId,
-        kind: "shell",
-        command: part.input?.command ?? "",
-        done: part.state === "output-available" || part.state === "output-error",
-      });
-    }
-  }
-  return items;
-}
-
-function TimelineItem({ item }: { item: Item }) {
-  if (item.kind === "text") {
-    return (
-      <Bubble variant="ghost">
-        <BubbleContent>
-          <Markdown>{item.text}</Markdown>
-        </BubbleContent>
-      </Bubble>
-    );
-  }
-  if (item.kind === "thought") {
-    return (
-      <Marker>
-        <MarkerIcon>
-          <IconBrain />
-        </MarkerIcon>
-        <MarkerContent>Thought for {formatSeconds(item.ms)}</MarkerContent>
-      </Marker>
-    );
-  }
-  if (!item.done) {
-    return <StatusMarker label={`Running ${item.command}`} />;
-  }
+function Step({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <Marker>
-      <MarkerIcon>
-        <IconTerminal2 />
-      </MarkerIcon>
-      <MarkerContent>Ran {item.command}</MarkerContent>
+      <MarkerIcon>{icon}</MarkerIcon>
+      <MarkerContent>{children}</MarkerContent>
     </Marker>
   );
+}
+
+function TimelinePart({ part }: { part: Part }) {
+  switch (part.type) {
+    case "text":
+      return (
+        <Bubble variant="ghost">
+          <BubbleContent>
+            <Markdown>{part.text}</Markdown>
+          </BubbleContent>
+        </Bubble>
+      );
+    case "data-thought":
+      return <Step icon={<IconBrain />}>Thought for {formatSeconds(part.data.ms)}</Step>;
+    case "data-command":
+      return part.data.running ? (
+        <StatusMarker label={`Running ${part.data.command}`} />
+      ) : (
+        <Step icon={<IconTerminal2 />}>Ran {part.data.command}</Step>
+      );
+    case "data-search":
+      return part.data.running ? (
+        <StatusMarker label="Searching the web" />
+      ) : (
+        <Step icon={<IconWorldSearch />}>Searched {part.data.query}</Step>
+      );
+    default:
+      return null;
+  }
 }
 
 export function AssistantTurn({
@@ -84,21 +58,28 @@ export function AssistantTurn({
   message: MemoriUIMessage;
   streaming: boolean;
 }) {
-  const items = timeline(message);
-  const last = items.at(-1);
+  const last = message.parts.findLast(
+    (part) =>
+      part.type === "text" ||
+      part.type === "data-thought" ||
+      part.type === "data-command" ||
+      part.type === "data-search",
+  );
   const thinking =
     streaming &&
-    !message.parts.some((part) => part.type === "data-curation") &&
-    last?.kind !== "text" &&
-    !(last?.kind === "shell" && !last.done);
-  const text = items
-    .flatMap((item) => (item.kind === "text" ? [item.text] : []))
+    last?.type !== "text" &&
+    !(
+      (last?.type === "data-command" || last?.type === "data-search") &&
+      last.data.running
+    );
+  const text = message.parts
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n\n");
 
   return (
     <div className="flex w-full flex-col gap-3">
-      {items.map((item) => (
-        <TimelineItem key={item.key} item={item} />
+      {[...message.parts.entries()].map(([index, part]) => (
+        <TimelinePart key={`${part.type}-${index}`} part={part} />
       ))}
       {thinking ? <StatusMarker label="Thinking" /> : null}
       {streaming ? null : (

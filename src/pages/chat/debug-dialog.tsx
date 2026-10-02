@@ -26,6 +26,7 @@ import {
   CHAT_MODELS,
   EFFORT_LABELS,
   type CallUsage,
+  type MemoryOperation,
   type MemoriUIMessage,
 } from "@/shared/lib/memori";
 import { cn } from "@/shared/lib/utils";
@@ -33,7 +34,6 @@ import { cn } from "@/shared/lib/utils";
 import { RetrievalTables } from "./retrieval-tables";
 
 type Part = MemoriUIMessage["parts"][number];
-type ToolPart = Extract<Part, { type: "tool-memory_upsert" | "tool-memory_delete" }>;
 type DataPart<T extends Part["type"]> = Extract<Part, { type: T; data: unknown }>["data"];
 
 function collect(parts: Part[]) {
@@ -42,8 +42,6 @@ function collect(parts: Part[]) {
     prompt: undefined as string | undefined,
     curation: undefined as DataPart<"data-curation"> | undefined,
     chatReasoning: [] as string[],
-    curationReasoning: [] as string[],
-    tools: [] as ToolPart[],
     compaction: undefined as DataPart<"data-compaction"> | undefined,
     errors: [] as string[],
     usage: undefined as DataPart<"data-usage"> | undefined,
@@ -57,18 +55,14 @@ function collect(parts: Part[]) {
         trace.prompt = part.data.prompt;
         break;
       case "data-curation":
-        trace.curation = part.data;
+        if (Array.isArray(part.data.operations)) {
+          trace.curation = part.data;
+        }
         break;
       case "reasoning":
         if (part.text) {
-          (trace.curation ? trace.curationReasoning : trace.chatReasoning).push(
-            part.text,
-          );
+          trace.chatReasoning.push(part.text);
         }
-        break;
-      case "tool-memory_upsert":
-      case "tool-memory_delete":
-        trace.tools.push(part);
         break;
       case "data-compaction":
         trace.compaction = part.data;
@@ -84,13 +78,6 @@ function collect(parts: Part[]) {
     }
   }
   return trace;
-}
-
-function hasTraceErrors(parts: Part[]) {
-  return parts.some(
-    (part) =>
-      part.type === "data-error" || ("state" in part && part.state === "output-error"),
-  );
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -129,14 +116,13 @@ function UsageTable({ usage }: { usage: DataPart<"data-usage"> }) {
           <TableHead>Input</TableHead>
           <TableHead>Output</TableHead>
           <TableHead>Reasoning</TableHead>
-          <TableHead>Requests</TableHead>
           <TableHead>Time</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         <TableRow>
           <TableCell>Retrieval</TableCell>
-          <TableCell colSpan={4} />
+          <TableCell colSpan={3} />
           <TableCell>{formatSeconds(usage.retrievalMs)}</TableCell>
         </TableRow>
         {calls.map(([label, call]) =>
@@ -146,7 +132,6 @@ function UsageTable({ usage }: { usage: DataPart<"data-usage"> }) {
               <TableCell>{formatNumber(call.inputTokens)}</TableCell>
               <TableCell>{formatNumber(call.outputTokens)}</TableCell>
               <TableCell>{formatNumber(call.reasoningTokens)}</TableCell>
-              <TableCell>{call.requests}</TableCell>
               <TableCell>{formatSeconds(call.ms)}</TableCell>
             </TableRow>
           ) : null,
@@ -156,21 +141,11 @@ function UsageTable({ usage }: { usage: DataPart<"data-usage"> }) {
   );
 }
 
-function toolResult(part: ToolPart) {
-  if (part.state === "output-available") {
-    return part.output;
-  }
-  if (part.state === "output-error") {
-    return part.errorText;
-  }
-  return "running";
-}
-
-function ToolTable({
-  tools,
+function OperationTable({
+  operations,
   retrieval,
 }: {
-  tools: ToolPart[];
+  operations: MemoryOperation[];
   retrieval: DataPart<"data-retrieval"> | undefined;
 }) {
   const before = new Map(
@@ -180,7 +155,7 @@ function ToolTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Tool</TableHead>
+          <TableHead>Action</TableHead>
           <TableHead>ID</TableHead>
           <TableHead>Before</TableHead>
           <TableHead>After</TableHead>
@@ -189,38 +164,29 @@ function ToolTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {tools.map((part) => {
-          const id = part.input?.memory_id ?? undefined;
-          const upsert = part.type === "tool-memory_upsert" ? part.input : undefined;
-          return (
-            <TableRow key={part.toolCallId}>
-              <TableCell>{part.type.replace("tool-", "")}</TableCell>
-              <TableCell>{id ?? "new"}</TableCell>
-              <TableCell className="min-w-48 whitespace-normal text-muted-foreground">
-                {id ? before.get(id) : null}
-              </TableCell>
-              <TableCell className="min-w-48 whitespace-normal">
-                {upsert?.content}
-              </TableCell>
-              <TableCell>
-                {upsert ? (
-                  <div className="flex gap-1">
-                    <Badge variant="secondary">{upsert.importance}</Badge>
-                    <Badge variant="outline">{upsert.scope}</Badge>
-                  </div>
-                ) : null}
-              </TableCell>
-              <TableCell
-                className={cn(
-                  "whitespace-normal",
-                  part.state === "output-error" && "text-destructive",
-                )}
-              >
-                {toolResult(part)}
-              </TableCell>
-            </TableRow>
-          );
-        })}
+        {operations.map((operation) => (
+          <TableRow
+            key={`${operation.action}-${operation.memory_id}-${operation.content}`}
+          >
+            <TableCell>{operation.action}</TableCell>
+            <TableCell>{operation.memory_id ?? "new"}</TableCell>
+            <TableCell className="min-w-48 whitespace-normal text-muted-foreground">
+              {operation.memory_id ? before.get(operation.memory_id) : null}
+            </TableCell>
+            <TableCell className="min-w-48 whitespace-normal">
+              {operation.content}
+            </TableCell>
+            <TableCell>
+              {operation.action === "upsert" ? (
+                <div className="flex gap-1">
+                  <Badge variant="secondary">{operation.importance}</Badge>
+                  <Badge variant="outline">{operation.scope}</Badge>
+                </div>
+              ) : null}
+            </TableCell>
+            <TableCell className="whitespace-normal">{operation.result}</TableCell>
+          </TableRow>
+        ))}
       </TableBody>
     </Table>
   );
@@ -228,7 +194,7 @@ function ToolTable({
 
 export function DebugDialog({ message }: { message: MemoriUIMessage }) {
   const trace = collect(message.parts);
-  const failed = hasTraceErrors(message.parts);
+  const failed = trace.errors.length > 0;
 
   return (
     <Dialog>
@@ -293,20 +259,18 @@ export function DebugDialog({ message }: { message: MemoriUIMessage }) {
             <Pre>{trace.chatReasoning.join("\n\n")}</Pre>
           </Section>
         ) : null}
-        {trace.curation?.prompt ? (
+        {trace.curation ? (
           <Section title="Curation input">
             <Pre>{trace.curation.prompt}</Pre>
           </Section>
         ) : null}
-        {trace.curationReasoning.length > 0 ? (
-          <Section title="Curation reasoning">
-            <Pre>{trace.curationReasoning.join("\n\n")}</Pre>
-          </Section>
-        ) : null}
         {trace.curation ? (
           <Section title="Memory changes">
-            {trace.tools.length > 0 ? (
-              <ToolTable tools={trace.tools} retrieval={trace.retrieval} />
+            {trace.curation.operations.length > 0 ? (
+              <OperationTable
+                operations={trace.curation.operations}
+                retrieval={trace.retrieval}
+              />
             ) : (
               <p className="text-muted-foreground">No memory changes</p>
             )}

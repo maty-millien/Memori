@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 
 import type { AttachmentType } from "@/shared/lib/memori";
 
@@ -22,8 +22,8 @@ export function saveUpload(bytes: Uint8Array, mediaType: AttachmentType) {
   return UPLOAD_URL + name;
 }
 
-export function readUpload(url: string) {
-  return readFileSync(join(UPLOADS_DIR, basename(url)));
+export function uploadPath(url: string) {
+  return resolve(UPLOADS_DIR, basename(url));
 }
 
 export function trashUploads() {
