@@ -1,5 +1,6 @@
 import { IconFileTypePdf } from "@tabler/icons-react";
 
+import { Bubble, BubbleContent } from "@/shared/components/ui/bubble";
 import type { MemoriUIMessage } from "@/shared/lib/memori";
 
 export function UserTurn({ message }: { message: MemoriUIMessage }) {
@@ -37,9 +38,9 @@ export function UserTurn({ message }: { message: MemoriUIMessage }) {
         </div>
       ) : null}
       {text.trim() ? (
-        <div className="max-w-[70%] rounded-3xl bg-accent px-4 py-2.5 break-words whitespace-pre-wrap">
-          {text}
-        </div>
+        <Bubble variant="secondary" align="end" className="max-w-[70%]">
+          <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+        </Bubble>
       ) : null}
     </div>
   );

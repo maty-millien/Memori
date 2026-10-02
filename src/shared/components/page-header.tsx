@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import { Spinner } from "@/shared/components/ui/spinner";
+import { Wordmark } from "@/shared/components/wordmark";
 import { cn } from "@/shared/lib/utils";
 
 const LINKS = [
@@ -59,12 +60,8 @@ export function PageHeader({ className }: { className?: string }) {
     <header
       className={cn("flex h-14 shrink-0 items-center gap-2 px-4 sm:px-6", className)}
     >
-      <Link
-        to="/"
-        className="inline-flex items-center text-xl font-medium tracking-tight"
-      >
-        <IconBrain className="mr-1 size-4" />
-        Memori
+      <Link to="/">
+        <Wordmark />
       </Link>
       <DropdownMenu>
         <DropdownMenuTrigger

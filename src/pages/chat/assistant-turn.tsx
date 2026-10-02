@@ -1,4 +1,5 @@
 import { Markdown } from "@/shared/components/markdown";
+import { Bubble, BubbleContent } from "@/shared/components/ui/bubble";
 import type { MemoriUIMessage } from "@/shared/lib/memori";
 
 import { CopyButton } from "./copy-button";
@@ -33,7 +34,13 @@ export function AssistantTurn({
 
   return (
     <div className="flex w-full flex-col gap-3">
-      {text ? <Markdown>{text}</Markdown> : null}
+      {text ? (
+        <Bubble variant="ghost">
+          <BubbleContent>
+            <Markdown>{text}</Markdown>
+          </BubbleContent>
+        </Bubble>
+      ) : null}
       {label ? <StatusMarker label={label} /> : null}
       <div className="-ml-1.5 flex">
         {text ? <CopyButton text={text} /> : null}
