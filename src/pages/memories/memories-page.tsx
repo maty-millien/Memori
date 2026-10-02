@@ -74,7 +74,7 @@ export function MemoriesPage({
               memories={conversations}
               icon={<IconMessages />}
               title="No episodes"
-              description="Episodes appear when the chat passes half the context window."
+              description="Episodes appear when the chat passes 100k tokens of context."
             />
           </TabsContent>
         </Tabs>

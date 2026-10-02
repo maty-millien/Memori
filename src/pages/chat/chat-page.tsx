@@ -15,7 +15,7 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/shared/components/ui/message-scroller";
-import type { ChatSettings, MemoriUIMessage } from "@/shared/lib/memori";
+import type { ChatModel, ChatSettings, MemoriUIMessage } from "@/shared/lib/memori";
 
 import { AssistantTurn } from "./assistant-turn";
 import { Composer } from "./composer";
@@ -36,9 +36,11 @@ function contextTokens(messages: MemoriUIMessage[]) {
 
 export function ChatPage({
   initialMessages,
+  models,
   initialChatSettings,
 }: {
   initialMessages: MemoriUIMessage[];
+  models: ChatModel[];
   initialChatSettings: ChatSettings;
 }) {
   const router = useRouter();
@@ -74,6 +76,7 @@ export function ChatPage({
       <Composer
         busy={busy}
         contextTokens={contextTokens(messages)}
+        models={models}
         chatSettings={chatSettings}
         onChatSettingsChange={(settings) => {
           setChatSettings(settings);

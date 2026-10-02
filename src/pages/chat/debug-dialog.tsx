@@ -23,8 +23,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/tooltip";
 import { formatDate, formatNumber, formatSeconds } from "@/shared/lib/format";
 import {
-  CHAT_MODELS,
-  EFFORT_LABELS,
+  effortLabel,
   type CallUsage,
   type MemoryOperation,
   type MemoriUIMessage,
@@ -102,7 +101,7 @@ function Pre({ children }: { children: string }) {
 function UsageTable({ usage }: { usage: DataPart<"data-usage"> }) {
   const chatLabel =
     usage.chatModel && usage.chatEffort
-      ? `Chat (${CHAT_MODELS[usage.chatModel]} ${EFFORT_LABELS[usage.chatEffort]})`
+      ? `Chat (${usage.chatModel} ${effortLabel(usage.chatEffort)})`
       : "Chat";
   const calls: [string, CallUsage | null][] = [
     [chatLabel, usage.chat],

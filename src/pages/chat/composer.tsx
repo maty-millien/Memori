@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Spinner } from "@/shared/components/ui/spinner";
-import { ATTACHMENT_TYPES, type ChatSettings } from "@/shared/lib/memori";
+import { ATTACHMENT_TYPES, type ChatModel, type ChatSettings } from "@/shared/lib/memori";
 import { cn } from "@/shared/lib/utils";
 
 import { ContextRing } from "./context-ring";
@@ -18,12 +18,14 @@ import { ModelMenu } from "./model-menu";
 export function Composer({
   busy,
   contextTokens,
+  models,
   chatSettings,
   onChatSettingsChange,
   onSend,
 }: {
   busy: boolean;
   contextTokens: number;
+  models: ChatModel[];
   chatSettings: ChatSettings;
   onChatSettingsChange: (settings: ChatSettings) => void;
   onSend: (text: string, files: File[]) => void;
@@ -34,6 +36,10 @@ export function Composer({
   const fileInput = useRef<HTMLInputElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const empty = !value.trim() && files.length === 0;
+  const images = models.find((model) => model.id === chatSettings.model)?.images ?? false;
+  const accepted = ATTACHMENT_TYPES.filter(
+    (type) => images || !type.startsWith("image/"),
+  ).join(",");
 
   useEffect(() => {
     const element = form.current;
@@ -55,7 +61,7 @@ export function Composer({
       event.preventDefault();
       setDragging(false);
       const dropped = Array.from(event.dataTransfer?.files ?? []).filter((file) =>
-        (ATTACHMENT_TYPES as readonly string[]).includes(file.type),
+        accepted.split(",").includes(file.type),
       );
       setFiles((current) => [...current, ...dropped]);
     }
@@ -63,7 +69,7 @@ export function Composer({
     element?.addEventListener("dragleave", leave, controller);
     element?.addEventListener("drop", drop, controller);
     return () => controller.abort();
-  }, []);
+  }, [accepted]);
 
   function submit() {
     if (empty || busy) {
@@ -137,7 +143,7 @@ export function Composer({
             type="file"
             multiple
             hidden
-            accept={ATTACHMENT_TYPES.join(",")}
+            accept={accepted}
             onChange={(event) => {
               setFiles([...files, ...Array.from(event.target.files ?? [])]);
               event.target.value = "";
@@ -153,7 +159,11 @@ export function Composer({
             <IconPaperclip />
             <span className="sr-only">Attach files</span>
           </Button>
-          <ModelMenu settings={chatSettings} onChange={onChatSettingsChange} />
+          <ModelMenu
+            models={models}
+            settings={chatSettings}
+            onChange={onChatSettingsChange}
+          />
         </div>
         <div className="flex items-center gap-2">
           <ContextRing tokens={contextTokens} />

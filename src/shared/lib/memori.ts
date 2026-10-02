@@ -1,22 +1,8 @@
 import type { UIMessage } from "ai";
 
 export const SCOPES = ["global", "topical"] as const;
-export const CONTEXT_WINDOW = 272_000;
+export const CONTEXT_WINDOW = 100_000;
 export const KINDS = ["memory", "conversation"] as const;
-export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
-export const EFFORT_LABELS = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "XHigh",
-  max: "Max",
-} as const;
-export const CHAT_MODELS = {
-  "gpt-6-luna": "GPT-6-Luna",
-  "gpt-6.1-sol": "GPT-6.1-Sol",
-  "gpt-6-astra": "GPT-6-Astra",
-} as const;
-export const CHAT_MODEL_IDS = ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"] as const;
 export const ATTACHMENT_TYPES = [
   "image/png",
   "image/jpeg",
@@ -36,10 +22,19 @@ export const IMPORTANCES = [
 export type Scope = (typeof SCOPES)[number];
 export type Kind = (typeof KINDS)[number];
 export type Importance = (typeof IMPORTANCES)[number];
-export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
-export type ChatModel = (typeof CHAT_MODEL_IDS)[number];
 export type AttachmentType = (typeof ATTACHMENT_TYPES)[number];
-export type ChatSettings = { model: ChatModel; effort: ReasoningEffort };
+export type ChatSettings = { model: string; effort: string };
+export type ChatModel = {
+  id: string;
+  name: string;
+  efforts: string[];
+  defaultEffort: string;
+  images: boolean;
+};
+
+export function effortLabel(effort: string) {
+  return effort.charAt(0).toUpperCase() + effort.slice(1);
+}
 
 export type Memory = {
   id: string;
@@ -95,8 +90,8 @@ type MemoriData = {
     chat: CallUsage;
     curation: CallUsage | null;
     context?: number;
-    chatModel?: ChatModel;
-    chatEffort?: ReasoningEffort;
+    chatModel?: string;
+    chatEffort?: string;
   };
   error: { message: string };
 };

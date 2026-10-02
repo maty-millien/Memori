@@ -4,10 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 
 import {
-  CHAT_MODEL_IDS,
   IMPORTANCES,
   KINDS,
-  REASONING_EFFORTS,
   SCOPES,
   type ChatSettings,
   type Importance,
@@ -237,10 +235,10 @@ function getSetting(key: string) {
   return row ? settingRow.parse(row).value : undefined;
 }
 
-export function getChatSettings(): ChatSettings {
+export function getChatSettings() {
   return {
-    model: z.enum(CHAT_MODEL_IDS).catch("gpt-6-luna").parse(getSetting("chat_model")),
-    effort: z.enum(REASONING_EFFORTS).catch("low").parse(getSetting("chat_effort")),
+    model: getSetting("chat_model"),
+    effort: getSetting("chat_effort"),
   };
 }
 

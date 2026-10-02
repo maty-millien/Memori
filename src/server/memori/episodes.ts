@@ -8,7 +8,7 @@ import { transcript } from "./transcript";
 
 export async function createEpisode(history: MemoriUIMessage[]) {
   const cut = history.findIndex(
-    (message, index) => index >= history.length / 2 && message.role === "user",
+    (message, index) => index >= history.length / 3 && message.role === "user",
   );
   const messages = history.slice(0, cut === -1 ? history.length : cut);
   const conversation = transcript(messages);

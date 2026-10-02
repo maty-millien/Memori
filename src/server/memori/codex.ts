@@ -6,6 +6,10 @@ import { createInterface } from "node:readline";
 
 import { z } from "zod";
 
+import type { ChatModel, ChatSettings } from "@/shared/lib/memori";
+
+import { getChatSettings } from "./db";
+
 const MODEL = "gpt-6-luna";
 const REASONING_EFFORT = "low";
 const CODEX_HOME = resolve(".memori/codex");
@@ -44,7 +48,10 @@ type CodexNotification =
   | { method: "rawResponseItem/completed"; params: { threadId: string; item: RawItem } }
   | {
       method: "thread/tokenUsage/updated";
-      params: { threadId: string; tokenUsage: { last: Usage } };
+      params: {
+        threadId: string;
+        tokenUsage: { last: Usage };
+      };
     }
   | {
       method: "turn/completed";
@@ -134,6 +141,46 @@ export function codexClient() {
 }
 
 const threadStart = z.object({ thread: z.object({ id: z.string() }) });
+
+const modelList = z.object({
+  data: z.array(
+    z.object({
+      model: z.string(),
+      displayName: z.string(),
+      hidden: z.boolean(),
+      isDefault: z.boolean(),
+      defaultReasoningEffort: z.string(),
+      inputModalities: z.array(z.string()),
+      supportedReasoningEfforts: z.array(z.object({ reasoningEffort: z.string() })),
+    }),
+  ),
+});
+
+export async function chatOptions() {
+  const client = await codexClient();
+  const { data } = modelList.parse(await client.request("model/list", {}));
+  const visible = data.filter((item) => !item.hidden);
+  const models: ChatModel[] = visible.map((item) => ({
+    id: item.model,
+    name: item.displayName,
+    efforts: item.supportedReasoningEfforts.map((effort) => effort.reasoningEffort),
+    defaultEffort: item.defaultReasoningEffort,
+    images: item.inputModalities.includes("image"),
+  }));
+  const stored = getChatSettings();
+  const model =
+    models.find((item) => item.id === stored.model) ??
+    models[visible.findIndex((item) => item.isDefault)] ??
+    models[0];
+  const settings: ChatSettings = {
+    model: model.id,
+    effort:
+      stored.effort && model.efforts.includes(stored.effort)
+        ? stored.effort
+        : model.defaultEffort,
+  };
+  return { models, settings };
+}
 
 export async function startThread(
   instructions: string,

@@ -12,23 +12,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
-import {
-  CHAT_MODEL_IDS,
-  CHAT_MODELS,
-  EFFORT_LABELS,
-  REASONING_EFFORTS,
-  type ChatModel,
-  type ChatSettings,
-  type ReasoningEffort,
-} from "@/shared/lib/memori";
+import { effortLabel, type ChatModel, type ChatSettings } from "@/shared/lib/memori";
 
 export function ModelMenu({
+  models,
   settings,
   onChange,
 }: {
+  models: ChatModel[];
   settings: ChatSettings;
   onChange: (settings: ChatSettings) => void;
 }) {
+  const current = models.find((model) => model.id === settings.model);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -37,8 +32,8 @@ export function ModelMenu({
         }
       >
         <OpenAILogo />
-        {CHAT_MODELS[settings.model]}
-        <span className="text-muted-foreground">{EFFORT_LABELS[settings.effort]}</span>
+        {current?.name ?? settings.model}
+        <span className="text-muted-foreground">{effortLabel(settings.effort)}</span>
         <IconChevronDown className="text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-48">
@@ -46,13 +41,21 @@ export function ModelMenu({
           <DropdownMenuLabel>Model</DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={settings.model}
-            onValueChange={(model: ChatModel) =>
-              onChange({ model, effort: settings.effort })
-            }
+            onValueChange={(id: string) => {
+              const model = models.find((item) => item.id === id);
+              if (model) {
+                onChange({
+                  model: id,
+                  effort: model.efforts.includes(settings.effort)
+                    ? settings.effort
+                    : model.defaultEffort,
+                });
+              }
+            }}
           >
-            {CHAT_MODEL_IDS.map((id) => (
-              <DropdownMenuRadioItem key={id} value={id}>
-                {CHAT_MODELS[id]}
+            {models.map((model) => (
+              <DropdownMenuRadioItem key={model.id} value={model.id}>
+                {model.name}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
@@ -62,13 +65,13 @@ export function ModelMenu({
           <DropdownMenuLabel>Reasoning effort</DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={settings.effort}
-            onValueChange={(effort: ReasoningEffort) =>
+            onValueChange={(effort: string) =>
               onChange({ model: settings.model, effort })
             }
           >
-            {REASONING_EFFORTS.map((effort) => (
+            {current?.efforts.map((effort) => (
               <DropdownMenuRadioItem key={effort} value={effort}>
-                {EFFORT_LABELS[effort]}
+                {effortLabel(effort)}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>

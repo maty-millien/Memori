@@ -8,16 +8,17 @@ import {
   type MemoriUIMessage,
 } from "@/shared/lib/memori";
 
-import { runTurn, startThread, codexClient, type Thread, type TurnUsage } from "./codex";
+import {
+  chatOptions,
+  runTurn,
+  startThread,
+  codexClient,
+  type Thread,
+  type TurnUsage,
+} from "./codex";
 import { SETTINGS } from "./config";
 import { curate } from "./curation";
-import {
-  getChatSettings,
-  getThreadItems,
-  listLiveMessages,
-  saveMessage,
-  saveThreadItems,
-} from "./db";
+import { getThreadItems, listLiveMessages, saveMessage, saveThreadItems } from "./db";
 import { embedOne } from "./embeddings";
 import { createEpisode } from "./episodes";
 import {
@@ -110,7 +111,6 @@ async function chatThread(history: MemoriUIMessage[]) {
 
 export function chatResponse(messageId: string, text: string, files: Attachment[]) {
   const history = listLiveMessages();
-  const chatSettings = getChatSettings();
   const createdAt = new Date();
   const userMessage: MemoriUIMessage = {
     id: messageId,
@@ -134,6 +134,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
     execute: async ({ writer }) => {
       writer.write({ type: "start" });
 
+      const { settings: chatSettings } = await chatOptions();
       const body = userContent(userMessage);
       const retrievalStarted = performance.now();
       const { live, ...retrieval } = retrieve(
@@ -289,7 +290,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
         writer.write({ type: "data-error", data: { message: errorMessage(error) } });
       }
 
-      if (reply.usage.context > SETTINGS.episodeThreshold * CONTEXT_WINDOW) {
+      if (reply.usage.context > CONTEXT_WINDOW) {
         try {
           const episode = await createEpisode(history);
           if (episode) {

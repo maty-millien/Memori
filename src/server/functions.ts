@@ -1,10 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { CHAT_MODEL_IDS, REASONING_EFFORTS } from "@/shared/lib/memori";
-
+import { chatOptions } from "./memori/codex";
 import {
-  getChatSettings,
   listLiveMessages,
   listMemories,
   listMessages,
@@ -18,12 +16,10 @@ export const getMessages = createServerFn({ strict: { output: false } }).handler
   listMessages(),
 );
 
-export const loadChatSettings = createServerFn().handler(() => getChatSettings());
+export const loadChatOptions = createServerFn().handler(() => chatOptions());
 
 export const saveChatSettings = createServerFn({ method: "POST" })
-  .validator(
-    z.object({ model: z.enum(CHAT_MODEL_IDS), effort: z.enum(REASONING_EFFORTS) }),
-  )
+  .validator(z.object({ model: z.string(), effort: z.string() }))
   .handler(({ data }) => {
     setChatSettings(data);
   });

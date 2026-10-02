@@ -19,7 +19,6 @@ export const SETTINGS = {
   rankRecencyWeight: 0.07,
   rankUsageWeight: 0.03,
   rankGlobalScopeBoost: 0.1,
-  episodeThreshold: 0.5,
 } as const;
 
 export function openrouterApiKey() {
