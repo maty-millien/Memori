@@ -1,20 +1,11 @@
 import { useChat } from "@ai-sdk/react";
-import { IconAlertCircle, IconMessages } from "@tabler/icons-react";
+import { IconAlertCircle } from "@tabler/icons-react";
 import { useRouter } from "@tanstack/react-router";
 import { DefaultChatTransport } from "ai";
 import { useState } from "react";
 
 import { PageHeader } from "@/shared/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/components/ui/alert";
-import { Bubble, BubbleContent } from "@/shared/components/ui/bubble";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/shared/components/ui/empty";
-import { Message, MessageContent } from "@/shared/components/ui/message";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -25,8 +16,9 @@ import {
 } from "@/shared/components/ui/message-scroller";
 import type { MemoriUIMessage } from "@/shared/lib/memori";
 
-import { AssistantTurn, StatusMarker } from "./assistant-turn";
+import { AssistantTurn } from "./assistant-turn";
 import { Composer } from "./composer";
+import { StatusMarker } from "./trace-marker";
 
 function userText(message: MemoriUIMessage) {
   return message.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
@@ -64,27 +56,44 @@ export function ChatPage({ initialMessages }: { initialMessages: MemoriUIMessage
   const busy = status === "submitted" || status === "streaming";
   const lastId = messages.at(-1)?.id;
 
+  const composer = (
+    <div className="flex w-full flex-col gap-2 px-2 pb-3 sm:pb-4">
+      {error ? (
+        <Alert variant="destructive">
+          <IconAlertCircle />
+          <AlertTitle>Request failed</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      <Composer
+        busy={busy}
+        contextTokens={contextTokens(messages)}
+        onSend={(text) => void sendMessage({ text })}
+      />
+    </div>
+  );
+
+  if (messages.length === 0 && !busy) {
+    return (
+      <div className="flex h-svh flex-col">
+        <PageHeader />
+        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-end pb-14 md:justify-center">
+          <h1 className="mb-6 text-3xl font-medium tracking-tight">
+            What's on your mind?
+          </h1>
+          {composer}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-svh flex-col">
-      <PageHeader title="Chat" />
+      <PageHeader />
       <MessageScrollerProvider autoScroll>
         <MessageScroller className="flex-1">
           <MessageScrollerViewport>
-            <MessageScrollerContent className="mx-auto w-full max-w-3xl p-4">
-              {messages.length === 0 && !busy ? (
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <IconMessages />
-                    </EmptyMedia>
-                    <EmptyTitle>Start a conversation</EmptyTitle>
-                    <EmptyDescription>
-                      Each turn shows the retrieved memories, the injected prompt, and the
-                      curation calls.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : null}
+            <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-6 px-6 pt-4 pb-10">
               {messages.map((message) => (
                 <MessageScrollerItem
                   key={message.id}
@@ -92,15 +101,11 @@ export function ChatPage({ initialMessages }: { initialMessages: MemoriUIMessage
                   scrollAnchor={message.role === "user"}
                 >
                   {message.role === "user" ? (
-                    <Message align="end">
-                      <MessageContent>
-                        <Bubble align="end">
-                          <BubbleContent className="whitespace-pre-wrap">
-                            {userText(message)}
-                          </BubbleContent>
-                        </Bubble>
-                      </MessageContent>
-                    </Message>
+                    <div className="flex justify-end">
+                      <div className="max-w-[70%] rounded-3xl bg-accent px-5 py-2.5 break-words whitespace-pre-wrap">
+                        {userText(message)}
+                      </div>
+                    </div>
                   ) : (
                     <AssistantTurn
                       message={message}
@@ -119,20 +124,7 @@ export function ChatPage({ initialMessages }: { initialMessages: MemoriUIMessage
           <MessageScrollerButton />
         </MessageScroller>
       </MessageScrollerProvider>
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 p-4">
-        {error ? (
-          <Alert variant="destructive">
-            <IconAlertCircle />
-            <AlertTitle>Request failed</AlertTitle>
-            <AlertDescription>{error.message}</AlertDescription>
-          </Alert>
-        ) : null}
-        <Composer
-          busy={busy}
-          contextTokens={contextTokens(messages)}
-          onSend={(text) => void sendMessage({ text })}
-        />
-      </div>
+      <div className="mx-auto w-full max-w-3xl">{composer}</div>
     </div>
   );
 }

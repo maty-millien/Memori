@@ -70,9 +70,17 @@ export function MemoriesPage({
 
   return (
     <div className="flex min-h-svh flex-col">
-      <PageHeader title="Memories">
+      <PageHeader>
         <AlertDialog>
-          <AlertDialogTrigger render={<Button variant="destructive" size="sm" />}>
+          <AlertDialogTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-full text-muted-foreground hover:text-foreground"
+              />
+            }
+          >
             <IconTrash data-icon="inline-start" />
             Reset
           </AlertDialogTrigger>
@@ -92,7 +100,8 @@ export function MemoriesPage({
           </AlertDialogContent>
         </AlertDialog>
       </PageHeader>
-      <div className="p-4">
+      <div className="mx-auto w-full max-w-5xl px-6 pt-4 pb-10">
+        <h1 className="mb-6 text-3xl font-medium tracking-tight">Memories</h1>
         <Tabs defaultValue="memories">
           <TabsList>
             <TabsTrigger value="memories">

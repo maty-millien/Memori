@@ -7,17 +7,15 @@ import {
 } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
+import { Markdown } from "@/shared/components/markdown";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/components/ui/alert";
-import { Bubble, BubbleContent } from "@/shared/components/ui/bubble";
 import { Marker, MarkerContent, MarkerIcon } from "@/shared/components/ui/marker";
-import { Message, MessageContent, MessageFooter } from "@/shared/components/ui/message";
-import { Spinner } from "@/shared/components/ui/spinner";
 import { formatNumber, formatSeconds } from "@/shared/lib/format";
 import type { CallUsage, MemoriUIMessage } from "@/shared/lib/memori";
 
 import { RetrievalMarker } from "./retrieval-marker";
 import { ToolMarker } from "./tool-marker";
-import { TraceMarker } from "./trace-marker";
+import { StatusMarker, TraceMarker } from "./trace-marker";
 
 type Usage = Extract<MemoriUIMessage["parts"][number], { type: "data-usage" }>["data"];
 
@@ -33,17 +31,6 @@ function formatUsage(usage: Usage) {
   ]
     .filter(Boolean)
     .join(" · ");
-}
-
-function StatusMarker({ label }: { label: string }) {
-  return (
-    <Marker>
-      <MarkerIcon>
-        <Spinner />
-      </MarkerIcon>
-      <MarkerContent className="shimmer">{label}</MarkerContent>
-    </Marker>
-  );
 }
 
 export function AssistantTurn({
@@ -82,20 +69,14 @@ export function AssistantTurn({
               label={curating ? "Curation reasoning" : "Reasoning"}
               shimmer={part.state === "streaming"}
             >
-              <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-                {part.text}
-              </p>
+              <p className="whitespace-pre-wrap">{part.text}</p>
             </TraceMarker>,
           );
         }
         break;
       case "text":
         replied = true;
-        items.push(
-          <Bubble key={index} variant="ghost">
-            <BubbleContent className="whitespace-pre-wrap">{part.text}</BubbleContent>
-          </Bubble>,
-        );
+        items.push(<Markdown key={index}>{part.text}</Markdown>);
         break;
       case "data-curation":
         curating = true;
@@ -107,7 +88,7 @@ export function AssistantTurn({
             icon={<IconArchive />}
             label={`Episode #${part.data.episodeId}, ${part.data.messageCount} messages summarized`}
           >
-            <p className="text-sm text-muted-foreground">{part.data.summary}</p>
+            <p>{part.data.summary}</p>
           </TraceMarker>,
         );
         break;
@@ -158,13 +139,11 @@ export function AssistantTurn({
   }
 
   return (
-    <Message align="start">
-      <MessageContent>
-        {items}
-        {usage ? <MessageFooter>{formatUsage(usage)}</MessageFooter> : null}
-      </MessageContent>
-    </Message>
+    <div className="flex w-full flex-col gap-3">
+      {items}
+      {usage ? (
+        <p className="text-xs text-muted-foreground">{formatUsage(usage)}</p>
+      ) : null}
+    </div>
   );
 }
-
-export { StatusMarker };
