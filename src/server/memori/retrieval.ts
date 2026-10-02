@@ -46,8 +46,12 @@ function rank(memory: Memory, similarity: number): RetrievedMemory {
   return { memory, score: { ...score, total } };
 }
 
-export function retrieve(query: Float32Array) {
-  const memories = listMemoryVectors("memory");
+export function retrieve(query: Float32Array, liveSince: string | undefined) {
+  const all = listMemoryVectors("memory");
+  const isLive = ({ memory }: Vector) =>
+    liveSince !== undefined && memory.updatedAt >= liveSince;
+  const memories = all.filter((vector) => !isLive(vector));
+  const live = all.filter(isLive).map(({ memory }) => memory);
   const candidates = new Map(
     nearest(memories, query, SETTINGS.retrievalPoolK).map(({ memory, similarity }) => [
       memory.id,
@@ -77,5 +81,5 @@ export function retrieve(query: Float32Array) {
     SETTINGS.similarConversations,
   ).map(({ memory }) => memory);
 
-  return { memories: retrieved, recent, similar };
+  return { memories: retrieved, recent, similar, live };
 }

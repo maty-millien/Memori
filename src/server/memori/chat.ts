@@ -106,7 +106,10 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
       writer.write({ type: "start" });
 
       const retrievalStarted = performance.now();
-      const retrieval = retrieve(await embedOne(body));
+      const { live, ...retrieval } = retrieve(
+        await embedOne(body),
+        history[0]?.metadata?.createdAt,
+      );
       const retrievalMs = Math.round(performance.now() - retrievalStarted);
       const userContent = timestampedUserContent(body, createdAt);
       const prompt = buildContextPrompt(
@@ -159,7 +162,8 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
       const curationPrompt = [
         wrap(
           "relevant_memories",
-          formatMemories(retrieval.memories.map((item) => item.memory)) || "(none)",
+          formatMemories([...retrieval.memories.map((item) => item.memory), ...live]) ||
+            "(none)",
         ),
         wrap(
           "recent_history",

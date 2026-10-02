@@ -2,7 +2,7 @@
 
 A local research app for long-term agent memory. Every chat turn shows what the memory layer did: the memories it retrieved and how they scored, the prompt sent to the model, the reasoning, and each memory tool call.
 
-There is a single endless chat. Each turn retrieves ranked memories and episode summaries, the chat model replies without tools, then a separate call curates memories with `memory_upsert` and `memory_delete`. When a turn uses more than half the context window, the oldest half of the live messages is summarized into an episode and leaves the model's history, so the chat never runs out of context.
+There is a single endless chat. Each turn retrieves ranked memories and episode summaries, the chat model replies without tools, then a separate call curates memories with `memory_upsert` and `memory_delete`. When a turn uses more than half the context window, the oldest half of the live messages is summarized into an episode and leaves the model's history, so the chat never runs out of context. A memory created or updated during a turn that is still in the live history is left out of the chat's retrieval, since the model already sees that turn; curation still receives it to avoid duplicates.
 
 ## Setup
 
