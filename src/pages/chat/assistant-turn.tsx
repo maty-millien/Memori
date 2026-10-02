@@ -1,6 +1,7 @@
 import { Markdown } from "@/shared/components/markdown";
 import type { MemoriUIMessage } from "@/shared/lib/memori";
 
+import { CopyButton } from "./copy-button";
 import { DebugDialog } from "./debug-dialog";
 import { StatusMarker } from "./trace-marker";
 
@@ -35,6 +36,7 @@ export function AssistantTurn({
       {text ? <Markdown>{text}</Markdown> : null}
       {label ? <StatusMarker label={label} /> : null}
       <div className="-ml-1.5 flex">
+        {text ? <CopyButton text={text} /> : null}
         <DebugDialog message={message} />
       </div>
     </div>
