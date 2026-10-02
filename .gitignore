@@ -1,218 +1,111 @@
-# ---------- Memori ----------
-.memori/
+# Dependencies
+node_modules/
+.bun/
+
+# Environment variables and local secrets
 .env
+.env.*
+!.env.example
+!.env.*.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.local
 
-# ---------- macOS ----------
-.DS_Store
-.AppleDouble
-.LSOverride
-Icon
-._*
-.DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
-.VolumeIcon.icns
-.com.apple.timemachine.donotpresent
-.AppleDB
-.AppleDesktop
-Network Trash Folder
-Temporary Items
-.apdisk
+# Build output and tool caches
+dist/
+dist-ssr/
+build/
+.output/
+.vite/
+.cache/
+.turbo/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+.tanstack/
+.vinxi/
+.wrangler/
+__unconfig*
 
-# ---------- Linux / Ubuntu ----------
-*~
-.fuse_hidden*
-.directory
-.Trash-*
-.nfs*
+# Tests and coverage
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+blob-report/
+*playwright*
 
-# ---------- Windows ----------
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-ehthumbs_vista.db
-*.stackdump
-[Dd]esktop.ini
-$RECYCLE.BIN/
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-*.lnk
-
-# ---------- Editors / IDEs ----------
-.vscode/
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-.idea/
-*.iml
-*.ipr
-*.iws
-.project
-.classpath
-.settings/
-*.sublime-workspace
-*.sublime-project
-.nova/
-.fleet/
-.history/
-.vs/
-
-# ---------- Vim / Emacs ----------
-*.swp
-*.swo
-*.swn
-*.bak
-*.tmp
-*~
-\#*\#
-.\#*
-.emacs.desktop
-.emacs.desktop.lock
-*.elc
-auto-save-list
-tramp
-
-# ---------- Logs / Debug ----------
-*.log
+# Logs
 logs/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
-*.pid
-*.seed
-*.pid.lock
+bun-error.log*
 
-# ---------- Environment / Secrets ----------
-.env
-.env.*
-!.env.example
-!.env.sample
-*.pem
-*.key
-secrets/
+# Local runtime data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+.data/
+todos.json
 
-# ---------- Node.js ----------
-node_modules/
-jspm_packages/
-.npm
-.yarn/
-.yarn-integrity
-.pnp.*
-.cache/
-dist/
-build/
-out/
-coverage/
-.nyc_output/
-*.tsbuildinfo
-.next/
-.nuxt/
-.svelte-kit/
-.vite/
-.turbo/
-.parcel-cache/
-
-# ---------- Python ----------
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-develop-eggs/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.tox/
-.coverage
-.coverage.*
-htmlcov/
-.venv/
-venv/
-env/
-ENV/
-
-# ---------- C / C++ ----------
-*.o
-*.ko
-*.obj
-*.elf
-*.a
-*.la
-*.lo
-*.lib
-*.slo
-*.dll
-*.so.*
-*.dylib
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-*.gch
-*.pch
-*.d
-*.idb
-*.pdb
-
-# ---------- Rust ----------
-target/
-Cargo.lock
-
-# ---------- Go ----------
-*.test
-*.prof
-
-# ---------- Java / Kotlin / Gradle ----------
-*.class
-*.jar
-*.war
-*.ear
-*.nar
-hs_err_pid*
-.gradle/
-gradle-app.setting
-
-# ---------- Misc ----------
-*.tar
-*.tar.gz
-*.tgz
-*.zip
-*.7z
-*.rar
-
-# ---------- Aladdin artifacts ----------
-artifacts/
-*.iso
-*.dmg
-
-# ---------- Project-local ----------
+# Temporary files
 tmp/
-.tmp/
-.local/
-*.pdf
-output*/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Editors and IDEs
+.idea/
+*.iml
+.fleet/
+.history/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.stackdump
+
+# Linux desktop and network filesystems
+.directory
+.Trash-*
+.fuse_hidden*
+.nfs*
+
+# Local deployment metadata
+.vercel/
+.netlify/
+
+# Memori local data
+.memori/
+
+# Local notes
 *.md
 !README.md

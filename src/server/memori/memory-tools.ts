@@ -1,0 +1,54 @@
+import { tool } from "ai";
+import { z } from "zod";
+
+import { IMPORTANCES, SCOPES } from "@/shared/lib/memori";
+
+import { deleteMemory, getMemory, insertMemory, updateMemory } from "./db";
+import { embedOne } from "./embeddings";
+
+export const memoryTools = {
+  memory_upsert: tool({
+    description:
+      "Create a new durable memory or replace the content of an existing one. Only call for stable, generalizable information worth recalling later.",
+    inputSchema: z.object({
+      content: z
+        .string()
+        .describe(
+          "Memory content phrased as a third-person statement that survives outside the current chat.",
+        ),
+      memory_id: z
+        .string()
+        .nullable()
+        .optional()
+        .describe("Existing memory id to replace. Omit when creating a new memory."),
+      scope: z.enum(SCOPES).default("topical"),
+      importance: z.enum(IMPORTANCES).default("useful_fact"),
+    }),
+    execute: async ({ content, memory_id, scope, importance }) => {
+      const embedding = await embedOne(content);
+      if (memory_id) {
+        if (!getMemory(memory_id)) {
+          return `memory "${memory_id}" not found`;
+        }
+        updateMemory(memory_id, content, importance, embedding);
+        return `updated memory with id "${memory_id}"`;
+      }
+      const id = insertMemory(
+        { content, scope, kind: "memory", importance, sessionId: null },
+        embedding,
+      );
+      return `created memory with id "${id}"`;
+    },
+  }),
+  memory_delete: tool({
+    description:
+      "Delete an existing memory when the user asks to forget it or when a retrieved memory is redundant.",
+    inputSchema: z.object({
+      memory_id: z.string().describe("The id of the memory to delete."),
+    }),
+    execute: async ({ memory_id }) =>
+      deleteMemory(memory_id)
+        ? `deleted memory with id "${memory_id}"`
+        : `memory "${memory_id}" not found`,
+  }),
+};
