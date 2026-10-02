@@ -17,7 +17,7 @@ function Step({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <Marker>
       <MarkerIcon>{icon}</MarkerIcon>
-      <MarkerContent>{children}</MarkerContent>
+      <MarkerContent className="truncate">{children}</MarkerContent>
     </Marker>
   );
 }

@@ -7,7 +7,7 @@ export function StatusMarker({ label }: { label: string }) {
       <MarkerIcon>
         <Spinner />
       </MarkerIcon>
-      <MarkerContent className="shimmer">{label}</MarkerContent>
+      <MarkerContent className="shimmer truncate">{label}</MarkerContent>
     </Marker>
   );
 }
