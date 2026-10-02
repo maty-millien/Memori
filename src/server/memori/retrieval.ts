@@ -70,9 +70,12 @@ export function retrieve(query: Float32Array) {
     .map(({ memory }) => memory)
     .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, SETTINGS.recentConversations);
-  const similar = nearest(conversations, query, SETTINGS.similarConversations).map(
-    ({ memory }) => memory,
-  );
+  const recentIds = new Set(recent.map((memory) => memory.id));
+  const similar = nearest(
+    conversations.filter(({ memory }) => !recentIds.has(memory.id)),
+    query,
+    SETTINGS.similarConversations,
+  ).map(({ memory }) => memory);
 
   return { memories: retrieved, recent, similar };
 }
