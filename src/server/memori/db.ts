@@ -162,8 +162,10 @@ export function markAccessed(ids: string[]) {
   }
 }
 
-export function resetMemories() {
-  db.exec("DELETE FROM memories; DELETE FROM sqlite_sequence WHERE name = 'memories';");
+export function resetDatabase() {
+  db.exec(
+    "DELETE FROM memories; DELETE FROM messages; DELETE FROM settings; DELETE FROM sqlite_sequence;",
+  );
 }
 
 function queryMessages(where: string): MemoriUIMessage[] {

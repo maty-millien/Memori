@@ -1,8 +1,19 @@
-import { IconBrain, IconMessageCircle, IconStack2 } from "@tabler/icons-react";
+import { IconBrain, IconMessageCircle, IconStack2, IconTrash } from "@tabler/icons-react";
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { triggerEpisode } from "@/server/functions";
+import { resetEverything, triggerEpisode } from "@/server/functions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/shared/components/ui/alert-dialog";
 import { Button } from "@/shared/components/ui/button";
 import {
   Sidebar,
@@ -17,6 +28,11 @@ const LINKS = [
   { to: "/", label: "Chat", icon: IconMessageCircle },
   { to: "/memories", label: "Memories", icon: IconBrain },
 ] as const;
+
+async function reset() {
+  await resetEverything();
+  window.location.assign("/");
+}
 
 export function AppSidebar() {
   const { pathname } = useLocation();
@@ -61,7 +77,7 @@ export function AppSidebar() {
           ))}
         </nav>
       </SidebarContent>
-      <SidebarFooter className="border-t border-border/40 px-3 py-3">
+      <SidebarFooter className="gap-1 border-t border-border/40 px-3 py-3">
         <Button
           variant="ghost"
           size="sm"
@@ -76,6 +92,35 @@ export function AppSidebar() {
           )}
           New episode
         </Button>
+        <AlertDialog>
+          <AlertDialogTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="justify-start text-muted-foreground hover:text-destructive"
+              />
+            }
+          >
+            <IconTrash data-icon="inline-start" />
+            Reset everything
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset everything?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This deletes the chat, every memory and episode, the model settings, and
+                all attachments.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={reset}>
+                Reset
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SidebarFooter>
     </Sidebar>
   );

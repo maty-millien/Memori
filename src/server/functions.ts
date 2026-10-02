@@ -8,10 +8,11 @@ import {
   listLiveMessages,
   listMemories,
   listMessages,
-  resetMemories,
+  resetDatabase,
   setChatSettings,
 } from "./memori/db";
 import { createEpisode } from "./memori/episodes";
+import { trashUploads } from "./memori/uploads";
 
 export const getMessages = createServerFn({ strict: { output: false } }).handler(() =>
   listMessages(),
@@ -32,8 +33,9 @@ export const getMemories = createServerFn().handler(() => ({
   conversations: listMemories("conversation"),
 }));
 
-export const resetAllMemories = createServerFn({ method: "POST" }).handler(() => {
-  resetMemories();
+export const resetEverything = createServerFn({ method: "POST" }).handler(() => {
+  resetDatabase();
+  trashUploads();
 });
 
 export const triggerEpisode = createServerFn({ method: "POST" }).handler(async () => {

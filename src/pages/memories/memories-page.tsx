@@ -1,22 +1,8 @@
-import { IconBrain, IconMessages, IconTrash } from "@tabler/icons-react";
-import { useRouter } from "@tanstack/react-router";
+import { IconBrain, IconMessages } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
-import { resetAllMemories } from "@/server/functions";
 import { PageHeader } from "@/shared/components/page-header";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/shared/components/ui/alert-dialog";
 import { Badge } from "@/shared/components/ui/badge";
-import { Button } from "@/shared/components/ui/button";
 import {
   Empty,
   EmptyDescription,
@@ -61,45 +47,9 @@ export function MemoriesPage({
   memories: Memory[];
   conversations: Memory[];
 }) {
-  const router = useRouter();
-
-  async function reset() {
-    await resetAllMemories();
-    await router.invalidate();
-  }
-
   return (
     <div className="flex min-h-svh flex-col">
-      <PageHeader>
-        <AlertDialog>
-          <AlertDialogTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full text-muted-foreground hover:text-foreground"
-              />
-            }
-          >
-            <IconTrash data-icon="inline-start" />
-            Reset
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Reset all memories?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This deletes every memory and episode. Chat history stays.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction variant="destructive" onClick={reset}>
-                Reset
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </PageHeader>
+      <PageHeader />
       <div className="mx-auto w-full max-w-5xl px-6 pt-4 pb-10">
         <h1 className="mb-6 text-3xl font-medium tracking-tight">Memories</h1>
         <Tabs defaultValue="memories">

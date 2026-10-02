@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import type { AttachmentType } from "@/shared/lib/memori";
@@ -23,4 +24,10 @@ export function saveUpload(bytes: Uint8Array, mediaType: AttachmentType) {
 
 export function readUpload(url: string) {
   return readFileSync(join(UPLOADS_DIR, basename(url)));
+}
+
+export function trashUploads() {
+  if (existsSync(UPLOADS_DIR)) {
+    execFileSync("trash", [UPLOADS_DIR]);
+  }
 }

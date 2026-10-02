@@ -156,9 +156,20 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
         chatStarted,
       );
 
+      const curationPrompt = [
+        wrap(
+          "relevant_memories",
+          formatMemories(retrieval.memories.map((item) => item.memory)) || "(none)",
+        ),
+        wrap(
+          "recent_history",
+          transcript(history.slice(-SETTINGS.curationHistoryMessages)) || "(none)",
+        ),
+        wrap("latest_turn", `user: ${userContent}\nassistant: ${reply}`),
+      ].join("\n\n");
       writer.write({
         type: "data-curation",
-        data: { startedAt: new Date().toISOString() },
+        data: { startedAt: new Date().toISOString(), prompt: curationPrompt },
       });
       const curationStarted = performance.now();
       let curationUsage: CallUsage | null = null;
@@ -167,17 +178,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
           model: codexModel,
           providerOptions: codexProviderOptions,
           system: CURATION_PROMPT,
-          prompt: [
-            wrap(
-              "relevant_memories",
-              formatMemories(retrieval.memories.map((item) => item.memory)) || "(none)",
-            ),
-            wrap(
-              "recent_history",
-              transcript(history.slice(-SETTINGS.curationHistoryMessages)) || "(none)",
-            ),
-            wrap("latest_turn", `user: ${userContent}\nassistant: ${reply}`),
-          ].join("\n\n"),
+          prompt: curationPrompt,
           tools: memoryTools,
           stopWhen: stepCountIs(5),
         });

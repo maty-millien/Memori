@@ -76,7 +76,7 @@ export type CallUsage = {
 type MemoriData = {
   retrieval: { memories: RetrievedMemory[]; recent: Memory[]; similar: Memory[] };
   prompt: { prompt: string };
-  curation: { startedAt: string };
+  curation: { startedAt: string; prompt?: string };
   compaction: { episodeId: string; summary: string; messageCount: number };
   usage: {
     retrievalMs: number;
