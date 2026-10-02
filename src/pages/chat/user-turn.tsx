@@ -37,7 +37,7 @@ export function UserTurn({ message }: { message: MemoriUIMessage }) {
         </div>
       ) : null}
       {text.trim() ? (
-        <div className="max-w-[70%] rounded-3xl bg-accent px-5 py-2.5 break-words whitespace-pre-wrap">
+        <div className="max-w-[70%] rounded-3xl bg-accent px-4 py-2.5 break-words whitespace-pre-wrap">
           {text}
         </div>
       ) : null}

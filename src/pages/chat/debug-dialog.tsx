@@ -1,4 +1,4 @@
-import { IconAlertCircle, IconInfoCircle } from "@tabler/icons-react";
+import { IconAlertCircle, IconScanTraces } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/shared/components/ui/alert";
@@ -250,7 +250,7 @@ export function DebugDialog({ message }: { message: MemoriUIMessage }) {
             />
           }
         >
-          <IconInfoCircle className="size-5" stroke={1.75} />
+          <IconScanTraces className="size-5" stroke={1.75} />
         </TooltipTrigger>
         <TooltipContent>Details</TooltipContent>
       </Tooltip>
