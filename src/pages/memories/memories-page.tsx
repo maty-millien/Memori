@@ -80,8 +80,7 @@ export function MemoriesPage({
             <AlertDialogHeader>
               <AlertDialogTitle>Reset all memories?</AlertDialogTitle>
               <AlertDialogDescription>
-                This deletes every memory and conversation summary. Session transcripts
-                stay.
+                This deletes every memory and episode. Chat history stays.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -100,7 +99,7 @@ export function MemoriesPage({
               Memories <Badge variant="secondary">{memories.length}</Badge>
             </TabsTrigger>
             <TabsTrigger value="conversations">
-              Conversations <Badge variant="secondary">{conversations.length}</Badge>
+              Episodes <Badge variant="secondary">{conversations.length}</Badge>
             </TabsTrigger>
           </TabsList>
           <TabsContent value="memories">
@@ -115,8 +114,8 @@ export function MemoriesPage({
             <MemoryList
               memories={conversations}
               icon={<IconMessages />}
-              title="No conversation summaries"
-              description="Start a new chat to summarize the current session."
+              title="No episodes"
+              description="Episodes appear when the chat passes half the context window."
             />
           </TabsContent>
         </Tabs>

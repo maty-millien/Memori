@@ -1,5 +1,3 @@
-import { Link } from "@tanstack/react-router";
-
 import { Badge } from "@/shared/components/ui/badge";
 import {
   Table,
@@ -25,7 +23,6 @@ export function MemoryTable({ memories }: { memories: Memory[] }) {
           <TableHead>Updated</TableHead>
           <TableHead>Last accessed</TableHead>
           <TableHead>Accesses</TableHead>
-          <TableHead>Session</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -43,15 +40,6 @@ export function MemoryTable({ memories }: { memories: Memory[] }) {
             <TableCell>{formatDate(memory.updatedAt)}</TableCell>
             <TableCell>{formatDate(memory.lastAccessedAt)}</TableCell>
             <TableCell>{memory.accessCount}</TableCell>
-            <TableCell>
-              {memory.sessionId ? (
-                <Link to="/sessions/$sessionId" params={{ sessionId: memory.sessionId }}>
-                  Open
-                </Link>
-              ) : (
-                "None"
-              )}
-            </TableCell>
           </TableRow>
         ))}
       </TableBody>

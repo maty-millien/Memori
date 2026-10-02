@@ -1,8 +1,8 @@
 import { useChat } from "@ai-sdk/react";
-import { IconAlertCircle, IconFlag, IconMessages } from "@tabler/icons-react";
+import { IconAlertCircle, IconMessages } from "@tabler/icons-react";
 import { useRouter } from "@tanstack/react-router";
 import { DefaultChatTransport } from "ai";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { PageHeader } from "@/shared/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/components/ui/alert";
@@ -23,37 +23,38 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/shared/components/ui/message-scroller";
-import { useChatBusy } from "@/shared/lib/chat-busy";
-import type { MemoriUIMessage, Session } from "@/shared/lib/memori";
+import type { MemoriUIMessage } from "@/shared/lib/memori";
 
 import { AssistantTurn, StatusMarker } from "./assistant-turn";
 import { Composer } from "./composer";
-import { TraceMarker } from "./trace-marker";
 
 function userText(message: MemoriUIMessage) {
   return message.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
 }
 
-export function ChatPage({
-  session,
-  initialMessages,
-}: {
-  session: Session;
-  initialMessages: MemoriUIMessage[];
-}) {
+function contextTokens(messages: MemoriUIMessage[]) {
+  for (const message of messages.toReversed()) {
+    for (const part of message.parts) {
+      if (part.type === "data-usage") {
+        return part.data.chat.inputTokens + part.data.chat.outputTokens;
+      }
+    }
+  }
+  return 0;
+}
+
+export function ChatPage({ initialMessages }: { initialMessages: MemoriUIMessage[] }) {
   const router = useRouter();
-  const { setBusy } = useChatBusy();
   const [transport] = useState(
     () =>
       new DefaultChatTransport<MemoriUIMessage>({
         api: "/api/chat",
         prepareSendMessagesRequest: ({ messages }) => ({
-          body: { sessionId: session.id, message: messages.at(-1) },
+          body: { message: messages.at(-1) },
         }),
       }),
   );
   const { messages, sendMessage, status, error } = useChat<MemoriUIMessage>({
-    id: session.id,
     messages: initialMessages,
     transport,
     onFinish: () => {
@@ -63,13 +64,9 @@ export function ChatPage({
   const busy = status === "submitted" || status === "streaming";
   const lastId = messages.at(-1)?.id;
 
-  useEffect(() => {
-    setBusy(busy);
-  }, [busy, setBusy]);
-
   return (
     <div className="flex h-svh flex-col">
-      <PageHeader title={session.title || "New chat"} />
+      <PageHeader title="Chat" />
       <MessageScrollerProvider autoScroll>
         <MessageScroller className="flex-1">
           <MessageScrollerViewport>
@@ -117,36 +114,25 @@ export function ChatPage({
                   <StatusMarker label="Retrieving memories" />
                 </MessageScrollerItem>
               ) : null}
-              {session.status === "ended" ? (
-                <MessageScrollerItem messageId="ended">
-                  <TraceMarker
-                    variant="separator"
-                    icon={<IconFlag />}
-                    label="Session ended"
-                  >
-                    <p className="text-sm text-muted-foreground">
-                      {session.summary || "No summary."}
-                    </p>
-                  </TraceMarker>
-                </MessageScrollerItem>
-              ) : null}
             </MessageScrollerContent>
           </MessageScrollerViewport>
           <MessageScrollerButton />
         </MessageScroller>
       </MessageScrollerProvider>
-      {session.status === "active" ? (
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 p-4">
-          {error ? (
-            <Alert variant="destructive">
-              <IconAlertCircle />
-              <AlertTitle>Request failed</AlertTitle>
-              <AlertDescription>{error.message}</AlertDescription>
-            </Alert>
-          ) : null}
-          <Composer busy={busy} onSend={(text) => void sendMessage({ text })} />
-        </div>
-      ) : null}
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 p-4">
+        {error ? (
+          <Alert variant="destructive">
+            <IconAlertCircle />
+            <AlertTitle>Request failed</AlertTitle>
+            <AlertDescription>{error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+        <Composer
+          busy={busy}
+          contextTokens={contextTokens(messages)}
+          onSend={(text) => void sendMessage({ text })}
+        />
+      </div>
     </div>
   );
 }

@@ -33,10 +33,7 @@ export const memoryTools = {
         updateMemory(memory_id, content, importance, embedding);
         return `updated memory with id "${memory_id}"`;
       }
-      const id = insertMemory(
-        { content, scope, kind: "memory", importance, sessionId: null },
-        embedding,
-      );
+      const id = insertMemory({ content, scope, kind: "memory", importance }, embedding);
       return `created memory with id "${id}"`;
     },
   }),

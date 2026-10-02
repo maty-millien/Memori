@@ -7,11 +7,17 @@ import {
   type ModelMessage,
 } from "ai";
 
-import type { CallUsage, MemoriUIMessage } from "@/shared/lib/memori";
+import {
+  CONTEXT_WINDOW,
+  type CallUsage,
+  type MemoriUIMessage,
+} from "@/shared/lib/memori";
 
 import { codexModel, codexProviderOptions } from "./codex";
-import { getSession, listMessages, saveMessage, setSessionTitle } from "./db";
+import { SETTINGS } from "./config";
+import { listLiveMessages, saveMessage } from "./db";
 import { embedOne } from "./embeddings";
+import { createEpisode } from "./episodes";
 import { errorMessage } from "./errors";
 import { memoryTools } from "./memory-tools";
 import {
@@ -50,15 +56,8 @@ function historyMessages(history: MemoriUIMessage[]): ModelMessage[] {
   });
 }
 
-export function chatResponse(sessionId: string, messageId: string, text: string) {
-  const session = getSession(sessionId);
-  if (!session) {
-    return new Response("Session not found", { status: 404 });
-  }
-  if (session.status === "ended") {
-    return new Response("Session ended", { status: 409 });
-  }
-  const history = listMessages(sessionId);
+export function chatResponse(messageId: string, text: string) {
+  const history = listLiveMessages();
   const createdAt = new Date();
   const userMessage: MemoriUIMessage = {
     id: messageId,
@@ -127,7 +126,7 @@ export function chatResponse(sessionId: string, messageId: string, text: string)
               "relevant_memories",
               formatMemories(retrieval.memories.map((item) => item.memory)) || "(none)",
             ),
-            wrap("session_history", transcript(history) || "(none)"),
+            wrap("recent_history", transcript(history) || "(none)"),
             wrap("latest_turn", `user: ${userContent}\nassistant: ${reply}`),
           ].join("\n\n"),
           tools: memoryTools,
@@ -154,6 +153,20 @@ export function chatResponse(sessionId: string, messageId: string, text: string)
         writer.write({ type: "data-error", data: { message: errorMessage(error) } });
       }
 
+      if (
+        chatUsage.inputTokens + chatUsage.outputTokens >
+        SETTINGS.episodeThreshold * CONTEXT_WINDOW
+      ) {
+        try {
+          const episode = await createEpisode(history);
+          if (episode) {
+            writer.write({ type: "data-compaction", data: episode });
+          }
+        } catch (error) {
+          writer.write({ type: "data-error", data: { message: errorMessage(error) } });
+        }
+      }
+
       writer.write({
         type: "data-usage",
         data: { retrievalMs, chat: chatUsage, curation: curationUsage },
@@ -165,12 +178,11 @@ export function chatResponse(sessionId: string, messageId: string, text: string)
       if (!completed) {
         return;
       }
-      saveMessage(sessionId, userMessage);
-      saveMessage(sessionId, {
+      saveMessage(userMessage);
+      saveMessage({
         ...responseMessage,
         metadata: { createdAt: new Date().toISOString() },
       });
-      setSessionTitle(sessionId, text.slice(0, 80));
     },
   });
 

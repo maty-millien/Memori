@@ -1,11 +1,9 @@
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import { getSessions } from "@/server/functions";
 import { AppSidebar } from "@/shared/components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/shared/components/ui/sidebar";
 import { TooltipProvider } from "@/shared/components/ui/tooltip";
-import { ChatBusyProvider } from "@/shared/lib/chat-busy";
 
 import appCss from "../global.css?url";
 
@@ -18,7 +16,6 @@ export const Route = createRootRoute({
     ],
     links: [{ rel: "stylesheet", href: appCss }],
   }),
-  loader: () => getSessions(),
   shellComponent: RootDocument,
   component: RootLayout,
 });
@@ -41,17 +38,14 @@ function RootDocument({ children }: { children: ReactNode }) {
 }
 
 function RootLayout() {
-  const sessions = Route.useLoaderData();
   return (
     <TooltipProvider>
-      <ChatBusyProvider>
-        <SidebarProvider>
-          <AppSidebar sessions={sessions} />
-          <SidebarInset className="min-w-0">
-            <Outlet />
-          </SidebarInset>
-        </SidebarProvider>
-      </ChatBusyProvider>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset className="min-w-0">
+          <Outlet />
+        </SidebarInset>
+      </SidebarProvider>
     </TooltipProvider>
   );
 }

@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
 
 export const SCOPES = ["global", "topical"] as const;
+export const CONTEXT_WINDOW = 272_000;
 export const KINDS = ["memory", "conversation"] as const;
 export const IMPORTANCES = [
   "identity",
@@ -24,7 +25,6 @@ export type Memory = {
   updatedAt: string;
   lastAccessedAt: string | null;
   accessCount: number;
-  sessionId: string | null;
 };
 
 export type Score = {
@@ -47,19 +47,11 @@ export type CallUsage = {
   ms: number;
 };
 
-export type Session = {
-  id: string;
-  title: string;
-  status: "active" | "ended";
-  createdAt: string;
-  endedAt: string | null;
-  summary: string | null;
-};
-
 type MemoriData = {
   retrieval: { memories: RetrievedMemory[]; recent: Memory[]; similar: Memory[] };
   prompt: { prompt: string };
   curation: { startedAt: string };
+  compaction: { episodeId: string; summary: string; messageCount: number };
   usage: { retrievalMs: number; chat: CallUsage; curation: CallUsage | null };
   error: { message: string };
 };

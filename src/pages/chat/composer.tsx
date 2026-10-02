@@ -5,15 +5,20 @@ import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
+  InputGroupText,
   InputGroupTextarea,
 } from "@/shared/components/ui/input-group";
 import { Spinner } from "@/shared/components/ui/spinner";
+import { formatNumber } from "@/shared/lib/format";
+import { CONTEXT_WINDOW } from "@/shared/lib/memori";
 
 export function Composer({
   busy,
+  contextTokens,
   onSend,
 }: {
   busy: boolean;
+  contextTokens: number;
   onSend: (text: string) => void;
 }) {
   const [value, setValue] = useState("");
@@ -51,6 +56,10 @@ export function Composer({
           }}
         />
         <InputGroupAddon align="block-end">
+          <InputGroupText>
+            {Math.round((contextTokens / CONTEXT_WINDOW) * 100)}% context,{" "}
+            {formatNumber(contextTokens)} / {formatNumber(CONTEXT_WINDOW)} tokens
+          </InputGroupText>
           <InputGroupButton
             type="submit"
             variant="default"

@@ -19,8 +19,8 @@ You are a thoughtful conversation partner with a human, lightly cynical edge. Ta
 You may receive any of these blocks before the user message:
 
 - \`<relevant_memories>\`: durable facts retrieved from long-term memory. Use them to inform your answer and respect the user's preferences (language, tone, length, format, anything they've told you about themselves or their work).
-- \`<recent_conversations>\`: summaries of the most recent past chats.
-- \`<similar_conversations>\`: summaries of the past chats most similar to the current message.
+- \`<recent_conversations>\`: summaries of the most recent earlier stretches of this same ongoing conversation. Older messages leave the chat history once they are summarized.
+- \`<similar_conversations>\`: summaries of the earlier stretches of this conversation most similar to the current message.
 - Conversation summary timestamps are shown in the user's current local timezone at full precision for reasoning. In normal replies, refer to them in natural, less precise terms like "earlier today", "yesterday", "last week", "in May", or "a while ago". Give exact timestamps or exact dates only when the user asks for them or precision is needed to avoid ambiguity.
 
 # Silence about the memory layer
@@ -35,7 +35,7 @@ You curate the long-term memory of an assistant. You never talk to the user. You
 # Input
 
 - \`<relevant_memories>\`: the memories retrieved for this turn, with their ids.
-- \`<session_history>\`: earlier turns of the current session, for context only.
+- \`<recent_history>\`: earlier recent turns of the conversation, for context only.
 - \`<latest_turn>\`: the user message and the assistant reply you must curate.
 
 Curate based on what the user said. The assistant reply is context; never save the assistant's own suggestions or opinions as facts about the user.
@@ -62,6 +62,6 @@ Curate based on what the user said. The assistant reply is context; never save t
 `;
 
 export const SUMMARY_PROMPT =
-  'Return JSON of shape {"summary": "<one or two sentences>"}. Write the summary ' +
-  "in the third person, focusing on what the user wanted and what was decided. " +
-  "Skip greetings and small talk.";
+  'Return JSON of shape {"summary": "<one short paragraph>"}. Write the summary ' +
+  "in the third person, focusing on the topics discussed, what the user wanted, " +
+  "and what was decided. Skip greetings and small talk.";

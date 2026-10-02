@@ -1,5 +1,6 @@
 import {
   IconAlertCircle,
+  IconArchive,
   IconBulb,
   IconCircleCheck,
   IconFileText,
@@ -99,6 +100,17 @@ export function AssistantTurn({
       case "data-curation":
         curating = true;
         break;
+      case "data-compaction":
+        items.push(
+          <TraceMarker
+            key={index}
+            icon={<IconArchive />}
+            label={`Episode #${part.data.episodeId}, ${part.data.messageCount} messages summarized`}
+          >
+            <p className="text-sm text-muted-foreground">{part.data.summary}</p>
+          </TraceMarker>,
+        );
+        break;
       case "tool-memory_upsert":
       case "tool-memory_delete":
         toolCalls += 1;
@@ -108,7 +120,7 @@ export function AssistantTurn({
         items.push(
           <Alert key={index} variant="destructive">
             <IconAlertCircle />
-            <AlertTitle>Curation failed</AlertTitle>
+            <AlertTitle>Memory update failed</AlertTitle>
             <AlertDescription>{part.data.message}</AlertDescription>
           </Alert>,
         );

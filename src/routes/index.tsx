@@ -1,12 +1,13 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
-import { getActiveSessionId } from "@/server/functions";
+import { ChatPage } from "@/pages/chat/chat-page";
+import { getMessages } from "@/server/functions";
 
 export const Route = createFileRoute("/")({
-  beforeLoad: async () => {
-    throw redirect({
-      to: "/sessions/$sessionId",
-      params: { sessionId: await getActiveSessionId() },
-    });
-  },
+  loader: () => getMessages(),
+  component: ChatRoute,
 });
+
+function ChatRoute() {
+  return <ChatPage initialMessages={Route.useLoaderData()} />;
+}
