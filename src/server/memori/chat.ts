@@ -172,7 +172,10 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
               "relevant_memories",
               formatMemories(retrieval.memories.map((item) => item.memory)) || "(none)",
             ),
-            wrap("recent_history", transcript(history) || "(none)"),
+            wrap(
+              "recent_history",
+              transcript(history.slice(-SETTINGS.curationHistoryMessages)) || "(none)",
+            ),
             wrap("latest_turn", `user: ${userContent}\nassistant: ${reply}`),
           ].join("\n\n"),
           tools: memoryTools,

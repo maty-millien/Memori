@@ -6,6 +6,7 @@ export const SETTINGS = {
   retrievalPoolK: 40,
   recentConversations: 10,
   similarConversations: 10,
+  curationHistoryMessages: 3,
   importanceWeights: {
     identity: 0.95,
     global_preference: 0.9,
