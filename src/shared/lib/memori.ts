@@ -67,6 +67,7 @@ export type RetrievedMemory = { memory: Memory; score: Score };
 
 export type CallUsage = {
   inputTokens: number;
+  cachedTokens: number;
   outputTokens: number;
   reasoningTokens: number;
   ms: number;

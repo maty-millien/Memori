@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { IMPORTANCES, SCOPES, type MemoryOperation } from "@/shared/lib/memori";
 
-import { runCodex } from "./codex";
+import { runOnce } from "./codex";
 import { deleteMemory, getMemory, insertMemory, updateMemory } from "./db";
 import { embedOne } from "./embeddings";
 import { CURATION_PROMPT } from "./prompts";
@@ -60,12 +60,7 @@ async function apply({ action, memory_id, content, scope, importance }: Operatio
 
 export async function curate(prompt: string) {
   const started = performance.now();
-  const { text, usage } = await runCodex({
-    name: "curation",
-    instructions: CURATION_PROMPT,
-    prompt,
-    schema: z.toJSONSchema(output),
-  });
+  const { text, usage } = await runOnce(CURATION_PROMPT, prompt, z.toJSONSchema(output));
   const operations: MemoryOperation[] = await Promise.all(
     output
       .parse(JSON.parse(text))

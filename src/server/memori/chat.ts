@@ -4,13 +4,20 @@ import {
   CONTEXT_WINDOW,
   type AttachmentType,
   type CallUsage,
+  type Memory,
   type MemoriUIMessage,
 } from "@/shared/lib/memori";
 
-import { runCodex, type CodexUsage } from "./codex";
+import { runTurn, startThread, codexClient, type Thread, type TurnUsage } from "./codex";
 import { SETTINGS } from "./config";
 import { curate } from "./curation";
-import { getChatSettings, listLiveMessages, saveMessage } from "./db";
+import {
+  getChatSettings,
+  getThreadItems,
+  listLiveMessages,
+  saveMessage,
+  saveThreadItems,
+} from "./db";
 import { embedOne } from "./embeddings";
 import { createEpisode } from "./episodes";
 import {
@@ -30,19 +37,75 @@ export type Attachment = {
   filename: string;
 };
 
+let chat: { thread: Thread; messages: string[] } | null = null;
+
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 const unwrapShell = (command: string) =>
   /^\/bin\/zsh -lc (['"])([\s\S]*)\1$/.exec(command)?.[2] ?? command;
 
-function callUsage(usage: CodexUsage, ms: number): CallUsage {
+const memoryKey = (memory: Memory) => `${memory.id}@${memory.updatedAt}`;
+
+function callUsage(usage: TurnUsage, ms: number): CallUsage {
   return {
-    inputTokens: usage.input_tokens,
-    outputTokens: usage.output_tokens,
-    reasoningTokens: usage.reasoning_output_tokens,
+    inputTokens: usage.inputTokens,
+    cachedTokens: usage.cachedInputTokens,
+    outputTokens: usage.outputTokens,
+    reasoningTokens: usage.reasoningOutputTokens,
     ms,
   };
+}
+
+function seedItems(history: MemoriUIMessage[]) {
+  return history.flatMap((message, index) => {
+    if (message.role === "user") {
+      return [];
+    }
+    const stored = getThreadItems(message.id);
+    if (stored) {
+      return stored;
+    }
+    const prompt = message.parts.find((part) => part.type === "data-prompt")?.data.prompt;
+    const previous = history[index - 1];
+    const user =
+      prompt ??
+      (previous
+        ? timestampedUserContent(
+            userContent(previous),
+            new Date(previous.metadata?.createdAt ?? Date.now()),
+          )
+        : "");
+    const reply = message.parts
+      .flatMap((part) => (part.type === "text" ? [part.text] : []))
+      .join("\n\n");
+    return [
+      { type: "message", role: "user", content: [{ type: "input_text", text: user }] },
+      {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: reply }],
+      },
+    ];
+  });
+}
+
+async function chatThread(history: MemoriUIMessage[]) {
+  const ids = history.map((message) => message.id);
+  if (
+    chat &&
+    chat.thread.client === (await codexClient()) &&
+    chat.messages.join() === ids.join()
+  ) {
+    return chat;
+  }
+  const thread = await startThread(CHAT_PROMPT, true);
+  const items = seedItems(history);
+  if (items.length > 0) {
+    await thread.client.request("thread/inject_items", { threadId: thread.id, items });
+  }
+  chat = { thread, messages: ids };
+  return chat;
 }
 
 export function chatResponse(messageId: string, text: string, files: Attachment[]) {
@@ -63,7 +126,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
     ],
     metadata: { createdAt: createdAt.toISOString() },
   };
-  let completed = false;
+  let turn: { session: NonNullable<typeof chat>; items: unknown[] } | null = null;
 
   const stream = createUIMessageStream<MemoriUIMessage>({
     originalMessages: [...history, userMessage],
@@ -78,22 +141,32 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
         history[0]?.metadata?.createdAt,
       );
       const retrievalMs = Math.round(performance.now() - retrievalStarted);
+      const seen = new Set(
+        history.flatMap((message) =>
+          message.parts.flatMap((part) =>
+            part.type === "data-retrieval"
+              ? [
+                  ...part.data.memories.map((item) => item.memory),
+                  ...part.data.recent,
+                  ...part.data.similar,
+                ].map(memoryKey)
+              : [],
+          ),
+        ),
+      );
+      const unseen = (memories: Memory[]) =>
+        memories.filter((memory) => !seen.has(memoryKey(memory)));
       const current = timestampedUserContent(body, createdAt);
       const prompt = buildContextPrompt(
         current,
-        retrieval.memories.map((item) => item.memory),
-        retrieval.recent,
-        retrieval.similar,
+        unseen(retrieval.memories.map((item) => item.memory)),
+        unseen(retrieval.recent),
+        unseen(retrieval.similar),
       );
       writer.write({ type: "data-retrieval", data: retrieval });
       writer.write({ type: "data-prompt", data: { prompt } });
 
-      const fullPrompt = [
-        history.length > 0 ? wrap("conversation_history", transcript(history)) : "",
-        prompt,
-      ]
-        .filter(Boolean)
-        .join("\n\n");
+      const session = await chatThread(history);
       const chatStarted = performance.now();
       let since: number | null = chatStarted;
       const thought = () => {
@@ -105,67 +178,92 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
           since = null;
         }
       };
-      const chat = await runCodex({
-        name: "chat",
-        instructions: CHAT_PROMPT,
-        prompt: fullPrompt,
+      const reply = await runTurn(session.thread, {
+        text: prompt,
         model: chatSettings.model,
         effort: chatSettings.effort,
-        webSearch: true,
         images: userMessage.parts.flatMap((part) =>
           part.type === "file" && part.mediaType.startsWith("image/")
             ? [uploadPath(part.url)]
             : [],
         ),
-        onEvent: (event) => {
-          if (event.type !== "item.started" && event.type !== "item.completed") {
+        onNotification: (notification) => {
+          if (notification.method === "item/agentMessage/delta") {
+            writer.write({
+              type: "text-delta",
+              id: notification.params.itemId,
+              delta: notification.params.delta,
+            });
             return;
           }
-          const { item } = event;
-          const done = event.type === "item.completed";
-          if (item.type === "reasoning" && done) {
-            writer.write({ type: "reasoning-start", id: item.id });
-            writer.write({ type: "reasoning-delta", id: item.id, delta: item.text });
-            writer.write({ type: "reasoning-end", id: item.id });
+          if (
+            notification.method !== "item/started" &&
+            notification.method !== "item/completed"
+          ) {
+            return;
           }
-          if (item.type === "agent_message" && done) {
-            thought();
-            writer.write({ type: "text-start", id: item.id });
-            writer.write({ type: "text-delta", id: item.id, delta: item.text });
-            writer.write({ type: "text-end", id: item.id });
-            since = performance.now();
-          }
-          if (item.type === "command_execution") {
-            thought();
-            writer.write({
-              type: "data-command",
-              id: item.id,
-              data: {
-                command: unwrapShell(item.command),
-                running: !done,
-                exitCode: item.exit_code ?? null,
-                output: item.aggregated_output.slice(-20_000),
-              },
-            });
-          }
-          if (item.type === "web_search") {
-            thought();
-            writer.write({
-              type: "data-search",
-              id: item.id,
-              data: { query: item.query, running: !done },
-            });
-          }
-          if (done && item.type !== "reasoning" && item.type !== "agent_message") {
-            since = performance.now();
+          const { item } = notification.params;
+          const done = notification.method === "item/completed";
+          switch (item.type) {
+            case "reasoning":
+              if (done && item.summary.length > 0) {
+                writer.write({ type: "reasoning-start", id: item.id });
+                writer.write({
+                  type: "reasoning-delta",
+                  id: item.id,
+                  delta: item.summary.join("\n\n"),
+                });
+                writer.write({ type: "reasoning-end", id: item.id });
+              }
+              break;
+            case "agentMessage":
+              if (done) {
+                writer.write({ type: "text-end", id: item.id });
+                since = performance.now();
+              } else {
+                thought();
+                writer.write({ type: "text-start", id: item.id });
+              }
+              break;
+            case "commandExecution":
+              thought();
+              writer.write({
+                type: "data-command",
+                id: item.id,
+                data: {
+                  command: unwrapShell(item.command),
+                  running: !done,
+                  exitCode: item.exitCode,
+                  output: (item.aggregatedOutput ?? "").slice(-20_000),
+                },
+              });
+              if (done) {
+                since = performance.now();
+              }
+              break;
+            case "webSearch":
+              thought();
+              writer.write({
+                type: "data-search",
+                id: item.id,
+                data: { query: item.query, running: !done },
+              });
+              if (done) {
+                since = performance.now();
+              }
+              break;
+            default:
+              break;
           }
         },
+      }).catch((error: unknown) => {
+        chat = null;
+        throw error;
       });
       const chatUsage = callUsage(
-        chat.usage,
+        reply.usage,
         Math.round(performance.now() - chatStarted),
       );
-      const context = Math.round(fullPrompt.length / 4) + chatUsage.outputTokens;
 
       const curationPrompt = [
         wrap(
@@ -177,7 +275,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
           "recent_history",
           transcript(history.slice(-SETTINGS.curationHistoryMessages)) || "(none)",
         ),
-        wrap("latest_turn", `user: ${current}\nassistant: ${chat.text}`),
+        wrap("latest_turn", `user: ${current}\nassistant: ${reply.text}`),
       ].join("\n\n");
       let curationUsage: CallUsage | null = null;
       try {
@@ -191,7 +289,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
         writer.write({ type: "data-error", data: { message: errorMessage(error) } });
       }
 
-      if (context > SETTINGS.episodeThreshold * CONTEXT_WINDOW) {
+      if (reply.usage.context > SETTINGS.episodeThreshold * CONTEXT_WINDOW) {
         try {
           const episode = await createEpisode(history);
           if (episode) {
@@ -208,16 +306,16 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
           retrievalMs,
           chat: chatUsage,
           curation: curationUsage,
-          context,
+          context: reply.usage.context,
           chatModel: chatSettings.model,
           chatEffort: chatSettings.effort,
         },
       });
       writer.write({ type: "finish" });
-      completed = true;
+      turn = { session, items: reply.items };
     },
     onEnd: ({ responseMessage }) => {
-      if (!completed) {
+      if (!turn) {
         return;
       }
       saveMessage(userMessage);
@@ -225,6 +323,8 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
         ...responseMessage,
         metadata: { createdAt: new Date().toISOString() },
       });
+      saveThreadItems(responseMessage.id, turn.items);
+      turn.session.messages.push(userMessage.id, responseMessage.id);
     },
   });
 

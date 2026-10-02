@@ -45,6 +45,10 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS thread_items (
+    message_id TEXT PRIMARY KEY,
+    items TEXT NOT NULL
+  );
 `);
 
 const memoryRow = z
@@ -164,7 +168,7 @@ export function markAccessed(ids: string[]) {
 
 export function resetDatabase() {
   db.exec(
-    "DELETE FROM memories; DELETE FROM messages; DELETE FROM settings; DELETE FROM sqlite_sequence;",
+    "DELETE FROM memories; DELETE FROM messages; DELETE FROM settings; DELETE FROM thread_items; DELETE FROM sqlite_sequence;",
   );
 }
 
@@ -207,6 +211,25 @@ export function assignEpisode(messageIds: string[], episodeId: string) {
   for (const id of messageIds) {
     statement.run(episodeId, id);
   }
+}
+
+export function saveThreadItems(messageId: string, items: unknown[]) {
+  db.prepare("INSERT INTO thread_items (message_id, items) VALUES (?, ?)").run(
+    messageId,
+    JSON.stringify(items),
+  );
+}
+
+export function getThreadItems(messageId: string): unknown[] | undefined {
+  const row = db
+    .prepare("SELECT items FROM thread_items WHERE message_id = ?")
+    .get(messageId);
+  if (!row) {
+    return undefined;
+  }
+  return z
+    .array(z.unknown())
+    .parse(JSON.parse(z.object({ items: z.string() }).parse(row).items));
 }
 
 function getSetting(key: string) {

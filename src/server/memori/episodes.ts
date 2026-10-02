@@ -1,6 +1,6 @@
 import type { MemoriUIMessage } from "@/shared/lib/memori";
 
-import { runCodex } from "./codex";
+import { runOnce } from "./codex";
 import { assignEpisode, insertMemory } from "./db";
 import { embedOne } from "./embeddings";
 import { SUMMARY_PROMPT } from "./prompts";
@@ -15,11 +15,7 @@ export async function createEpisode(history: MemoriUIMessage[]) {
   if (!conversation) {
     return null;
   }
-  const { text } = await runCodex({
-    name: "summary",
-    instructions: SUMMARY_PROMPT,
-    prompt: conversation,
-  });
+  const { text } = await runOnce(SUMMARY_PROMPT, conversation);
   const summary = text.trim();
   if (!summary) {
     return null;

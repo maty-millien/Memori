@@ -114,6 +114,7 @@ function UsageTable({ usage }: { usage: DataPart<"data-usage"> }) {
         <TableRow>
           <TableHead>Step</TableHead>
           <TableHead>Input</TableHead>
+          <TableHead>Cached</TableHead>
           <TableHead>Output</TableHead>
           <TableHead>Reasoning</TableHead>
           <TableHead>Time</TableHead>
@@ -122,7 +123,7 @@ function UsageTable({ usage }: { usage: DataPart<"data-usage"> }) {
       <TableBody>
         <TableRow>
           <TableCell>Retrieval</TableCell>
-          <TableCell colSpan={3} />
+          <TableCell colSpan={4} />
           <TableCell>{formatSeconds(usage.retrievalMs)}</TableCell>
         </TableRow>
         {calls.map(([label, call]) =>
@@ -130,6 +131,7 @@ function UsageTable({ usage }: { usage: DataPart<"data-usage"> }) {
             <TableRow key={label}>
               <TableCell>{label}</TableCell>
               <TableCell>{formatNumber(call.inputTokens)}</TableCell>
+              <TableCell>{formatNumber(call.cachedTokens ?? 0)}</TableCell>
               <TableCell>{formatNumber(call.outputTokens)}</TableCell>
               <TableCell>{formatNumber(call.reasoningTokens)}</TableCell>
               <TableCell>{formatSeconds(call.ms)}</TableCell>

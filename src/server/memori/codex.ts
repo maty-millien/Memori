@@ -1,50 +1,75 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, symlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 
+import { z } from "zod";
+
 const MODEL = "gpt-6-luna";
 const REASONING_EFFORT = "low";
-
 const CODEX_HOME = resolve(".memori/codex");
 
 type CodexItem =
-  | { id: string; type: "agent_message" | "reasoning"; text: string }
+  | { type: "userMessage"; id: string }
+  | { type: "agentMessage"; id: string; text: string }
+  | { type: "reasoning"; id: string; summary: string[] }
   | {
+      type: "commandExecution";
       id: string;
-      type: "command_execution";
       command: string;
-      aggregated_output: string;
-      exit_code?: number | null;
+      aggregatedOutput: string | null;
+      exitCode: number | null;
     }
-  | { id: string; type: "web_search"; query: string };
+  | { type: "webSearch"; id: string; query: string };
 
-export type CodexUsage = {
-  input_tokens: number;
-  output_tokens: number;
-  reasoning_output_tokens: number;
+type RawItem = { type: string; role?: string; content?: { text?: string }[] };
+
+type Usage = {
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
 };
 
-type CodexEvent =
-  | { type: "item.started" | "item.completed"; item: CodexItem }
-  | { type: "turn.completed"; usage: CodexUsage }
-  | { type: "turn.failed"; error: { message: string } }
-  | { type: "error"; message: string };
+type CodexNotification =
+  | {
+      method: "item/started" | "item/completed";
+      params: { threadId: string; item: CodexItem };
+    }
+  | {
+      method: "item/agentMessage/delta";
+      params: { threadId: string; itemId: string; delta: string };
+    }
+  | { method: "rawResponseItem/completed"; params: { threadId: string; item: RawItem } }
+  | {
+      method: "thread/tokenUsage/updated";
+      params: { threadId: string; tokenUsage: { last: Usage } };
+    }
+  | {
+      method: "turn/completed";
+      params: {
+        threadId: string;
+        turn: { status: string; error: { message: string } | null };
+      };
+    };
 
-type CodexRun = {
-  name: string;
-  instructions: string;
-  prompt: string;
-  model?: string;
-  effort?: string;
-  images?: string[];
-  schema?: unknown;
-  webSearch?: boolean;
-  onEvent?: (event: CodexEvent) => void;
+type Message =
+  | (CodexNotification & { id?: number })
+  | { id: number; method?: undefined; result?: unknown; error?: { message: string } };
+
+type Client = {
+  request: (method: string, params: unknown) => Promise<unknown>;
+  listeners: Set<(notification: CodexNotification) => void>;
 };
 
-function prepare(name: string, instructions: string, schema: unknown) {
+export type Thread = { client: Client; id: string };
+
+export type TurnUsage = Usage & { context: number };
+
+let current: Promise<Client> | null = null;
+
+async function createClient() {
   mkdirSync(CODEX_HOME, { recursive: true });
   const auth = join(CODEX_HOME, "auth.json");
   if (!existsSync(auth)) {
@@ -53,81 +78,180 @@ function prepare(name: string, instructions: string, schema: unknown) {
       auth,
     );
   }
-  const instructionsFile = join(CODEX_HOME, `${name}.md`);
-  writeFileSync(instructionsFile, instructions);
-  if (schema === undefined) {
-    return { instructionsFile, schemaFile: undefined };
-  }
-  const schemaFile = join(CODEX_HOME, `${name}.schema.json`);
-  writeFileSync(schemaFile, JSON.stringify(schema));
-  return { instructionsFile, schemaFile };
+  const child = spawn("codex", ["app-server"], {
+    cwd: tmpdir(),
+    env: { ...process.env, CODEX_HOME },
+  });
+  const pending = new Map<
+    number,
+    { resolve: (value: unknown) => void; reject: (error: Error) => void }
+  >();
+  const listeners = new Set<(notification: CodexNotification) => void>();
+  let nextId = 1;
+  const send = (message: unknown) => child.stdin.write(`${JSON.stringify(message)}\n`);
+  child.stderr.resume();
+  child.on("exit", () => {
+    current = null;
+    for (const { reject } of pending.values()) {
+      reject(new Error("Codex app-server exited"));
+    }
+  });
+  createInterface({ input: child.stdout }).on("line", (line) => {
+    const message: Message = JSON.parse(line);
+    if (message.method === undefined) {
+      const request = pending.get(message.id);
+      pending.delete(message.id);
+      if (message.error) {
+        request?.reject(new Error(message.error.message));
+      } else {
+        request?.resolve(message.result);
+      }
+    } else if (message.id === undefined) {
+      for (const listener of listeners) {
+        listener(message);
+      }
+    } else {
+      send({ id: message.id, error: { code: -32601, message: "Unsupported request" } });
+    }
+  });
+  const request = (method: string, params: unknown) =>
+    new Promise<unknown>((resolvePromise, reject) => {
+      const id = nextId++;
+      pending.set(id, { resolve: resolvePromise, reject });
+      send({ id, method, params });
+    });
+  await request("initialize", {
+    clientInfo: { name: "memori", title: "Memori", version: "1.0.0" },
+    capabilities: { experimentalApi: true, requestAttestation: false },
+  });
+  send({ method: "initialized" });
+  return { request, listeners };
 }
 
-export function runCodex({
-  name,
-  instructions,
-  prompt,
-  model = MODEL,
-  effort = REASONING_EFFORT,
-  images = [],
-  schema,
-  webSearch = false,
-  onEvent,
-}: CodexRun) {
-  const { instructionsFile, schemaFile } = prepare(name, instructions, schema);
-  const args = [
-    "exec",
-    "--json",
-    "--ephemeral",
-    "--skip-git-repo-check",
-    "--dangerously-bypass-approvals-and-sandbox",
-    "--cd",
-    tmpdir(),
-    "--model",
-    model,
-    "--config",
-    `model_reasoning_effort="${effort}"`,
-    "--config",
-    `model_instructions_file="${instructionsFile}"`,
-    "--config",
-    `web_search="${webSearch ? "live" : "disabled"}"`,
-    ...(schemaFile ? ["--output-schema", schemaFile] : []),
-    ...images.flatMap((image) => ["--image", image]),
-  ];
-  const child = spawn("codex", args, { env: { ...process.env, CODEX_HOME } });
-  child.stdin.end(prompt);
+export function codexClient() {
+  current ??= createClient();
+  return current;
+}
 
-  return new Promise<{ text: string; usage: CodexUsage }>((resolvePromise, reject) => {
-    let text = "";
-    let usage: CodexUsage | undefined;
-    let failure: string | undefined;
-    let stderr = "";
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-    createInterface({ input: child.stdout }).on("line", (line) => {
-      const event: CodexEvent = JSON.parse(line);
-      if (event.type === "item.completed" && event.item.type === "agent_message") {
-        text = event.item.text;
-      }
-      if (event.type === "turn.completed") {
-        usage = event.usage;
-      }
-      if (event.type === "turn.failed") {
-        failure = event.error.message;
-      }
-      if (event.type === "error") {
-        failure = event.message;
-      }
-      onEvent?.(event);
-    });
-    child.on("error", reject);
-    child.on("close", () => {
-      if (usage && !failure) {
-        resolvePromise({ text, usage });
-      } else {
-        reject(new Error(failure ?? (stderr.trim() || "Codex exited without a reply")));
-      }
-    });
+const threadStart = z.object({ thread: z.object({ id: z.string() }) });
+
+export async function startThread(
+  instructions: string,
+  webSearch: boolean,
+): Promise<Thread> {
+  const client = await codexClient();
+  const result = await client.request("thread/start", {
+    cwd: tmpdir(),
+    approvalPolicy: "never",
+    sandbox: "danger-full-access",
+    baseInstructions: instructions,
+    ephemeral: true,
+    experimentalRawEvents: true,
+    config: { web_search: webSearch ? "live" : "disabled" },
   });
+  return { client, id: threadStart.parse(result).thread.id };
+}
+
+export function runTurn(
+  thread: Thread,
+  {
+    text,
+    images = [],
+    model = MODEL,
+    effort = REASONING_EFFORT,
+    schema,
+    onNotification,
+  }: {
+    text: string;
+    images?: string[];
+    model?: string;
+    effort?: string;
+    schema?: unknown;
+    onNotification?: (notification: CodexNotification) => void;
+  },
+) {
+  return new Promise<{ text: string; usage: TurnUsage; items: RawItem[] }>(
+    (resolvePromise, reject) => {
+      let reply = "";
+      const items: RawItem[] = [];
+      const usage: TurnUsage = {
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+        context: 0,
+      };
+      const listener = (notification: CodexNotification) => {
+        if (notification.params.threadId !== thread.id) {
+          return;
+        }
+        switch (notification.method) {
+          case "rawResponseItem/completed":
+            items.push(notification.params.item);
+            break;
+          case "thread/tokenUsage/updated": {
+            const { last } = notification.params.tokenUsage;
+            usage.inputTokens += last.inputTokens;
+            usage.cachedInputTokens += last.cachedInputTokens;
+            usage.outputTokens += last.outputTokens;
+            usage.reasoningOutputTokens += last.reasoningOutputTokens;
+            usage.context = last.inputTokens + last.outputTokens;
+            break;
+          }
+          case "item/completed":
+            if (notification.params.item.type === "agentMessage") {
+              reply = notification.params.item.text;
+            }
+            break;
+          case "turn/completed": {
+            thread.client.listeners.delete(listener);
+            const { turn } = notification.params;
+            if (turn.status === "completed") {
+              const start = items.findIndex(
+                (item) => item.role === "user" && item.content?.[0]?.text === text,
+              );
+              resolvePromise({
+                text: reply,
+                usage,
+                items: items.slice(Math.max(start, 0)),
+              });
+            } else {
+              reject(new Error(turn.error?.message ?? `Codex turn ${turn.status}`));
+            }
+            break;
+          }
+          default:
+            break;
+        }
+        onNotification?.(notification);
+      };
+      thread.client.listeners.add(listener);
+      thread.client
+        .request("turn/start", {
+          threadId: thread.id,
+          input: [
+            { type: "text", text, text_elements: [] },
+            ...images.map((path) => ({ type: "localImage", path })),
+          ],
+          model,
+          effort,
+          outputSchema: schema,
+        })
+        .catch((error: unknown) => {
+          thread.client.listeners.delete(listener);
+          reject(error);
+        });
+    },
+  );
+}
+
+export async function runOnce(instructions: string, prompt: string, schema?: unknown) {
+  const thread = await startThread(instructions, false);
+  try {
+    return await runTurn(thread, { text: prompt, schema });
+  } finally {
+    void thread.client
+      .request("thread/unsubscribe", { threadId: thread.id })
+      .catch(() => {});
+  }
 }
