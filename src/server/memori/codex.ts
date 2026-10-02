@@ -147,7 +147,10 @@ export async function startThread(
     baseInstructions: instructions,
     ephemeral: true,
     experimentalRawEvents: true,
-    config: { web_search: webSearch ? "live" : "disabled" },
+    config: {
+      web_search: webSearch ? "live" : "disabled",
+      skills: { include_instructions: false },
+    },
   });
   return { client, id: threadStart.parse(result).thread.id };
 }
