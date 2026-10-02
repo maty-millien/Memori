@@ -105,8 +105,3 @@ $RECYCLE.BIN/
 
 # Memori local data
 .memori/
-
-# Local notes
-*.md
-!README.md
-!AGENTS.md
