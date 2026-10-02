@@ -11,7 +11,12 @@ import { Markdown } from "@/shared/components/markdown";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/components/ui/alert";
 import { Marker, MarkerContent, MarkerIcon } from "@/shared/components/ui/marker";
 import { formatNumber, formatSeconds } from "@/shared/lib/format";
-import type { CallUsage, MemoriUIMessage } from "@/shared/lib/memori";
+import {
+  CHAT_MODELS,
+  EFFORT_LABELS,
+  type CallUsage,
+  type MemoriUIMessage,
+} from "@/shared/lib/memori";
 
 import { RetrievalMarker } from "./retrieval-marker";
 import { ToolMarker } from "./tool-marker";
@@ -24,9 +29,13 @@ function formatCall(label: string, usage: CallUsage) {
 }
 
 function formatUsage(usage: Usage) {
+  const chatLabel =
+    usage.chatModel && usage.chatEffort
+      ? `${CHAT_MODELS[usage.chatModel]} ${EFFORT_LABELS[usage.chatEffort]}`
+      : "Chat";
   return [
     `Retrieval ${formatSeconds(usage.retrievalMs)}`,
-    formatCall("Chat", usage.chat),
+    formatCall(chatLabel, usage.chat),
     usage.curation ? formatCall("Curation", usage.curation) : null,
   ]
     .filter(Boolean)

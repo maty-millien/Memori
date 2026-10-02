@@ -4,6 +4,7 @@ import { useRouter } from "@tanstack/react-router";
 import { DefaultChatTransport } from "ai";
 import { useState } from "react";
 
+import { saveChatSettings } from "@/server/functions";
 import { PageHeader } from "@/shared/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/components/ui/alert";
 import {
@@ -14,15 +15,12 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/shared/components/ui/message-scroller";
-import type { MemoriUIMessage } from "@/shared/lib/memori";
+import type { ChatSettings, MemoriUIMessage } from "@/shared/lib/memori";
 
 import { AssistantTurn } from "./assistant-turn";
 import { Composer } from "./composer";
 import { StatusMarker } from "./trace-marker";
-
-function userText(message: MemoriUIMessage) {
-  return message.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
-}
+import { UserTurn } from "./user-turn";
 
 function contextTokens(messages: MemoriUIMessage[]) {
   for (const message of messages.toReversed()) {
@@ -35,8 +33,15 @@ function contextTokens(messages: MemoriUIMessage[]) {
   return 0;
 }
 
-export function ChatPage({ initialMessages }: { initialMessages: MemoriUIMessage[] }) {
+export function ChatPage({
+  initialMessages,
+  initialChatSettings,
+}: {
+  initialMessages: MemoriUIMessage[];
+  initialChatSettings: ChatSettings;
+}) {
   const router = useRouter();
+  const [chatSettings, setChatSettings] = useState(initialChatSettings);
   const [transport] = useState(
     () =>
       new DefaultChatTransport<MemoriUIMessage>({
@@ -68,7 +73,18 @@ export function ChatPage({ initialMessages }: { initialMessages: MemoriUIMessage
       <Composer
         busy={busy}
         contextTokens={contextTokens(messages)}
-        onSend={(text) => void sendMessage({ text })}
+        chatSettings={chatSettings}
+        onChatSettingsChange={(settings) => {
+          setChatSettings(settings);
+          void saveChatSettings({ data: settings });
+        }}
+        onSend={(text, files) => {
+          const transfer = new DataTransfer();
+          for (const file of files) {
+            transfer.items.add(file);
+          }
+          void sendMessage({ text, files: transfer.files });
+        }}
       />
     </div>
   );
@@ -101,11 +117,7 @@ export function ChatPage({ initialMessages }: { initialMessages: MemoriUIMessage
                   scrollAnchor={message.role === "user"}
                 >
                   {message.role === "user" ? (
-                    <div className="flex justify-end">
-                      <div className="max-w-[70%] rounded-3xl bg-accent px-5 py-2.5 break-words whitespace-pre-wrap">
-                        {userText(message)}
-                      </div>
-                    </div>
+                    <UserTurn message={message} />
                   ) : (
                     <AssistantTurn
                       message={message}

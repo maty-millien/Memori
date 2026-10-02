@@ -1,7 +1,21 @@
-import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
+import {
+  HeadContent,
+  Link,
+  Outlet,
+  Scripts,
+  createRootRoute,
+} from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { AppSidebar } from "@/shared/components/app-sidebar";
+import { Button } from "@/shared/components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/shared/components/ui/empty";
 import { SidebarInset, SidebarProvider } from "@/shared/components/ui/sidebar";
 import { TooltipProvider } from "@/shared/components/ui/tooltip";
 
@@ -18,6 +32,7 @@ export const Route = createRootRoute({
   }),
   shellComponent: RootDocument,
   component: RootLayout,
+  notFoundComponent: NotFound,
 });
 
 const THEME_SCRIPT = `document.documentElement.classList.toggle("dark", matchMedia("(prefers-color-scheme: dark)").matches)`;
@@ -47,5 +62,21 @@ function RootLayout() {
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
+  );
+}
+
+function NotFound() {
+  return (
+    <Empty className="h-full">
+      <EmptyHeader>
+        <EmptyTitle>Page not found</EmptyTitle>
+        <EmptyDescription>This page doesn't exist.</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button nativeButton={false} render={<Link to="/" />}>
+          Back to chat
+        </Button>
+      </EmptyContent>
+    </Empty>
   );
 }

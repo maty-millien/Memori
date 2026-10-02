@@ -4,9 +4,12 @@ import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 
 import {
+  CHAT_MODEL_IDS,
   IMPORTANCES,
   KINDS,
+  REASONING_EFFORTS,
   SCOPES,
+  type ChatSettings,
   type Importance,
   type Kind,
   type Memory,
@@ -38,6 +41,10 @@ db.exec(`
     created_at TEXT NOT NULL,
     episode_id INTEGER
   );
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
 `);
 
 const memoryRow = z
@@ -65,6 +72,8 @@ const memoryRow = z
   }));
 
 const vectorRow = z.object({ embedding: z.instanceof(Uint8Array) });
+
+const settingRow = z.object({ value: z.string() });
 
 const messageRow = z.object({
   id: z.string(),
@@ -196,4 +205,24 @@ export function assignEpisode(messageIds: string[], episodeId: string) {
   for (const id of messageIds) {
     statement.run(episodeId, id);
   }
+}
+
+function getSetting(key: string) {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
+  return row ? settingRow.parse(row).value : undefined;
+}
+
+export function getChatSettings(): ChatSettings {
+  return {
+    model: z.enum(CHAT_MODEL_IDS).catch("gpt-6-luna").parse(getSetting("chat_model")),
+    effort: z.enum(REASONING_EFFORTS).catch("low").parse(getSetting("chat_effort")),
+  };
+}
+
+export function setChatSettings(settings: ChatSettings) {
+  const statement = db.prepare(
+    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+  );
+  statement.run("chat_model", settings.model);
+  statement.run("chat_effort", settings.effort);
 }

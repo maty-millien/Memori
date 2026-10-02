@@ -3,19 +3,26 @@ import {
   createUIMessageStreamResponse,
   stepCountIs,
   streamText,
+  type FilePart,
   type LanguageModelUsage,
   type ModelMessage,
 } from "ai";
 
 import {
   CONTEXT_WINDOW,
+  type AttachmentType,
   type CallUsage,
   type MemoriUIMessage,
 } from "@/shared/lib/memori";
 
-import { codexModel, codexProviderOptions } from "./codex";
+import {
+  chatProviderOptions,
+  codexChatModel,
+  codexModel,
+  codexProviderOptions,
+} from "./codex";
 import { SETTINGS } from "./config";
-import { listLiveMessages, saveMessage } from "./db";
+import { getChatSettings, listLiveMessages, saveMessage } from "./db";
 import { embedOne } from "./embeddings";
 import { createEpisode } from "./episodes";
 import { errorMessage } from "./errors";
@@ -28,7 +35,14 @@ import {
 } from "./prompting";
 import { CHAT_PROMPT, CURATION_PROMPT } from "./prompts";
 import { retrieve } from "./retrieval";
-import { historyContent, transcript } from "./transcript";
+import { historyContent, transcript, userBody } from "./transcript";
+import { readUpload, saveUpload } from "./uploads";
+
+export type Attachment = {
+  bytes: Uint8Array;
+  mediaType: AttachmentType;
+  filename: string;
+};
 
 function callUsage(
   usage: LanguageModelUsage,
@@ -50,14 +64,28 @@ function historyMessages(history: MemoriUIMessage[]): ModelMessage[] {
     if (!content) {
       return [];
     }
-    return message.role === "user"
-      ? [{ role: "user", content }]
-      : [{ role: "assistant", content }];
+    if (message.role !== "user") {
+      return [{ role: "assistant", content }];
+    }
+    const files = message.parts.flatMap((part): FilePart[] =>
+      part.type === "file"
+        ? [
+            {
+              type: "file",
+              data: readUpload(part.url),
+              mediaType: part.mediaType,
+              filename: part.filename,
+            },
+          ]
+        : [],
+    );
+    return [{ role: "user", content: [{ type: "text", text: content }, ...files] }];
   });
 }
 
-export function chatResponse(messageId: string, text: string) {
+export function chatResponse(messageId: string, text: string, files: Attachment[]) {
   const history = listLiveMessages();
+  const chatSettings = getChatSettings();
   const createdAt = new Date();
   const userMessage: MemoriUIMessage = {
     id: messageId,
@@ -65,6 +93,10 @@ export function chatResponse(messageId: string, text: string) {
     parts: [{ type: "text", text }],
     metadata: { createdAt: createdAt.toISOString() },
   };
+  const body = userBody(
+    text,
+    files.map((file) => file.filename),
+  );
   let completed = false;
 
   const stream = createUIMessageStream<MemoriUIMessage>({
@@ -74,9 +106,9 @@ export function chatResponse(messageId: string, text: string) {
       writer.write({ type: "start" });
 
       const retrievalStarted = performance.now();
-      const retrieval = retrieve(await embedOne(text));
+      const retrieval = retrieve(await embedOne(body));
       const retrievalMs = Math.round(performance.now() - retrievalStarted);
-      const userContent = timestampedUserContent(text, createdAt);
+      const userContent = timestampedUserContent(body, createdAt);
       const prompt = buildContextPrompt(
         userContent,
         retrieval.memories.map((item) => item.memory),
@@ -88,10 +120,24 @@ export function chatResponse(messageId: string, text: string) {
 
       const chatStarted = performance.now();
       const chat = streamText({
-        model: codexModel,
-        providerOptions: codexProviderOptions,
+        model: codexChatModel(chatSettings.model),
+        providerOptions: chatProviderOptions(chatSettings.effort),
         system: CHAT_PROMPT,
-        messages: [...historyMessages(history), { role: "user", content: prompt }],
+        messages: [
+          ...historyMessages(history),
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              ...files.map((file): FilePart => ({
+                type: "file",
+                data: file.bytes,
+                mediaType: file.mediaType,
+                filename: file.filename,
+              })),
+            ],
+          },
+        ],
       });
       for await (const chunk of chat.toUIMessageStream<MemoriUIMessage>({
         sendStart: false,
@@ -169,7 +215,13 @@ export function chatResponse(messageId: string, text: string) {
 
       writer.write({
         type: "data-usage",
-        data: { retrievalMs, chat: chatUsage, curation: curationUsage },
+        data: {
+          retrievalMs,
+          chat: chatUsage,
+          curation: curationUsage,
+          chatModel: chatSettings.model,
+          chatEffort: chatSettings.effort,
+        },
       });
       writer.write({ type: "finish" });
       completed = true;
@@ -178,7 +230,18 @@ export function chatResponse(messageId: string, text: string) {
       if (!completed) {
         return;
       }
-      saveMessage(userMessage);
+      saveMessage({
+        ...userMessage,
+        parts: [
+          ...files.map((file) => ({
+            type: "file" as const,
+            mediaType: file.mediaType,
+            filename: file.filename,
+            url: saveUpload(file.bytes, file.mediaType),
+          })),
+          ...(text ? userMessage.parts : []),
+        ],
+      });
       saveMessage({
         ...responseMessage,
         metadata: { createdAt: new Date().toISOString() },

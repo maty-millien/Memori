@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 import { createOpenAI, type OpenAILanguageModelResponsesOptions } from "@ai-sdk/openai";
 
+import type { ChatModel, ReasoningEffort } from "@/shared/lib/memori";
+
 export const MODEL = "gpt-6-luna";
 export const REASONING_EFFORT = "low";
 export const NOT_SIGNED_IN =
@@ -42,6 +44,8 @@ const provider = createOpenAI({ baseURL: BASE_URL, apiKey: "codex", fetch: codex
 
 export const codexModel = provider.responses(MODEL);
 
+export const codexChatModel = (model: ChatModel) => provider.responses(model);
+
 export const codexProviderOptions = {
   openai: {
     store: false,
@@ -50,3 +54,7 @@ export const codexProviderOptions = {
     include: ["reasoning.encrypted_content"],
   } satisfies OpenAILanguageModelResponsesOptions,
 };
+
+export const chatProviderOptions = (effort: ReasoningEffort) => ({
+  openai: { ...codexProviderOptions.openai, reasoningEffort: effort },
+});
