@@ -1,7 +1,16 @@
-import { IconBrain, IconMessageCircle } from "@tabler/icons-react";
-import { Link, useLocation } from "@tanstack/react-router";
+import { IconBrain, IconMessageCircle, IconStack2 } from "@tabler/icons-react";
+import { Link, useLocation, useRouter } from "@tanstack/react-router";
+import { useState } from "react";
 
-import { Sidebar, SidebarContent, SidebarHeader } from "@/shared/components/ui/sidebar";
+import { triggerEpisode } from "@/server/functions";
+import { Button } from "@/shared/components/ui/button";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+} from "@/shared/components/ui/sidebar";
+import { Spinner } from "@/shared/components/ui/spinner";
 import { cn } from "@/shared/lib/utils";
 
 const LINKS = [
@@ -11,6 +20,18 @@ const LINKS = [
 
 export function AppSidebar() {
   const { pathname } = useLocation();
+  const router = useRouter();
+  const [summarizing, setSummarizing] = useState(false);
+
+  async function newEpisode() {
+    setSummarizing(true);
+    try {
+      await triggerEpisode();
+      await router.invalidate();
+    } finally {
+      setSummarizing(false);
+    }
+  }
 
   return (
     <Sidebar className="border-r border-border/40">
@@ -40,6 +61,22 @@ export function AppSidebar() {
           ))}
         </nav>
       </SidebarContent>
+      <SidebarFooter className="border-t border-border/40 px-3 py-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={summarizing}
+          onClick={() => void newEpisode()}
+          className="justify-start text-muted-foreground hover:text-foreground"
+        >
+          {summarizing ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <IconStack2 data-icon="inline-start" />
+          )}
+          New episode
+        </Button>
+      </SidebarFooter>
     </Sidebar>
   );
 }

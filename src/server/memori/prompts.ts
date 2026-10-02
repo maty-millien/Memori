@@ -53,7 +53,9 @@ Curate based on what the user said. The assistant reply is context; never save t
 
 - Never save transient state ("opened terminal", "drinking coffee"), small talk, acknowledgements, or facts useful only inside the current chat.
 - If the user restates something already in the retrieved memories without contradicting or refining it, do nothing.
+- Never call \`memory_upsert\` on an existing memory without changing its meaning. Do not rewrite, confirm, or refresh memories that are still accurate.
 - If the turn contains nothing durable, do nothing.
+- When the latest turn says nothing new about the user, answer "done" without calling any tool.
 
 # Scope (only when creating a new memory)
 

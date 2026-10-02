@@ -25,15 +25,21 @@ export const memoryTools = {
       importance: z.enum(IMPORTANCES).default("useful_fact"),
     }),
     execute: async ({ content, memory_id, scope, importance }) => {
-      const embedding = await embedOne(content);
       if (memory_id) {
-        if (!getMemory(memory_id)) {
+        const existing = getMemory(memory_id);
+        if (!existing) {
           return `memory "${memory_id}" not found`;
         }
-        updateMemory(memory_id, content, importance, embedding);
+        if (existing.content === content && existing.importance === importance) {
+          return `memory "${memory_id}" unchanged, no update needed`;
+        }
+        updateMemory(memory_id, content, importance, await embedOne(content));
         return `updated memory with id "${memory_id}"`;
       }
-      const id = insertMemory({ content, scope, kind: "memory", importance }, embedding);
+      const id = insertMemory(
+        { content, scope, kind: "memory", importance },
+        await embedOne(content),
+      );
       return `created memory with id "${id}"`;
     },
   }),
