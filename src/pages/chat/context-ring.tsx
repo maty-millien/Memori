@@ -66,7 +66,7 @@ export function ContextRing({ tokens }: { tokens: number }) {
           ))}
         </dl>
         <p className="mt-3 text-xs text-muted-foreground">
-          When the window is full, the oldest third of the chat is summarized into an
+          When the window is full, the oldest half of the chat is summarized into an
           episode.
         </p>
       </HoverCardContent>
