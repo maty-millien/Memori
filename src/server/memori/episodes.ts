@@ -27,7 +27,7 @@ export async function createEpisode(history: MemoriUIMessage[]) {
       kind: "conversation",
       importance: "useful_fact",
     },
-    await embedOne(summary),
+    await embedOne(summary, "document"),
   );
   assignEpisode(
     messages.map((message) => message.id),

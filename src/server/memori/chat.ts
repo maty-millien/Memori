@@ -138,7 +138,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
       const body = userContent(userMessage);
       const retrievalStarted = performance.now();
       const { live, ...retrieval } = retrieve(
-        await embedOne(body),
+        await embedOne(body, "query"),
         history[0]?.metadata?.createdAt,
       );
       const retrievalMs = Math.round(performance.now() - retrievalStarted);

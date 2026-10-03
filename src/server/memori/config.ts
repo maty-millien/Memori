@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 
 export const SETTINGS = {
-  embeddingModel: "google/gemini-embedding-2",
+  embeddingModel: "voyageai/voyage-4-large",
+  embeddingDimensions: 2048,
   retrievalTopK: 20,
   retrievalPoolK: 40,
   recentConversations: 10,

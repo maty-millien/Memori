@@ -42,7 +42,7 @@ async function apply({ action, memory_id, content, scope, importance }: Operatio
       memory_id,
       content,
       importance ?? existing.importance,
-      await embedOne(content),
+      await embedOne(content, "document"),
     );
     return `updated memory with id "${memory_id}"`;
   }
@@ -53,7 +53,7 @@ async function apply({ action, memory_id, content, scope, importance }: Operatio
       kind: "memory",
       importance: importance ?? "useful_fact",
     },
-    await embedOne(content),
+    await embedOne(content, "document"),
   );
   return `created memory with id "${id}"`;
 }
