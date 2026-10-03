@@ -35,6 +35,7 @@ export function Composer({
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const form = useRef<HTMLFormElement>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
   const empty = !value.trim() && files.length === 0;
   const images = models.find((model) => model.id === chatSettings.model)?.images ?? false;
   const accepted = ATTACHMENT_TYPES.filter(
@@ -65,9 +66,18 @@ export function Composer({
       );
       setFiles((current) => [...current, ...dropped]);
     }
+    function click(event: MouseEvent) {
+      if (
+        event.target instanceof Element &&
+        !event.target.closest("button, a, input, textarea")
+      ) {
+        textarea.current?.focus();
+      }
+    }
     element?.addEventListener("dragover", over, controller);
     element?.addEventListener("dragleave", leave, controller);
     element?.addEventListener("drop", drop, controller);
+    element?.addEventListener("click", click, controller);
     return () => controller.abort();
   }, [accepted]);
 
@@ -120,6 +130,7 @@ export function Composer({
         </div>
       ) : null}
       <textarea
+        ref={textarea}
         rows={1}
         value={value}
         placeholder="Ask Memori"
