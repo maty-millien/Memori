@@ -1,0 +1,287 @@
+import { IconAlertCircle, IconScanTraces } from "@tabler/icons-react";
+import type { ReactNode } from "react";
+
+import { formatDate, formatNumber, formatSeconds } from "@/shared/lib/format";
+import {
+  effortLabel,
+  type CallUsage,
+  type MemoryOperation,
+  type MemoriUIMessage,
+} from "@/shared/lib/memori";
+import { cn } from "@/shared/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/shared/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/shared/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
+
+import { RetrievalTables } from "./retrieval-tables";
+
+type Part = MemoriUIMessage["parts"][number];
+type DataPart<T extends Part["type"]> = Extract<Part, { type: T; data: unknown }>["data"];
+
+function collect(parts: Part[]) {
+  const trace = {
+    retrieval: undefined as DataPart<"data-retrieval"> | undefined,
+    prompt: undefined as string | undefined,
+    curation: undefined as DataPart<"data-curation"> | undefined,
+    chatReasoning: [] as string[],
+    compaction: undefined as DataPart<"data-compaction"> | undefined,
+    errors: [] as string[],
+    usage: undefined as DataPart<"data-usage"> | undefined,
+  };
+  for (const part of parts) {
+    switch (part.type) {
+      case "data-retrieval":
+        trace.retrieval = part.data;
+        break;
+      case "data-prompt":
+        trace.prompt = part.data.prompt;
+        break;
+      case "data-curation":
+        trace.curation = part.data;
+        break;
+      case "reasoning":
+        if (part.text) {
+          trace.chatReasoning.push(part.text);
+        }
+        break;
+      case "data-compaction":
+        trace.compaction = part.data;
+        break;
+      case "data-error":
+        trace.errors.push(part.data.message);
+        break;
+      case "data-usage":
+        trace.usage = part.data;
+        break;
+      default:
+        break;
+    }
+  }
+  return trace;
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex min-w-0 flex-col gap-2">
+      <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function Pre({ children }: { children: string }) {
+  return (
+    <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs whitespace-pre-wrap">
+      {children}
+    </pre>
+  );
+}
+
+function UsageTable({ usage }: { usage: DataPart<"data-usage"> }) {
+  const calls: [string, CallUsage | null][] = [
+    [`Chat (${usage.chatModel} ${effortLabel(usage.chatEffort)})`, usage.chat],
+    ["Curation", usage.curation],
+  ];
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Step</TableHead>
+          <TableHead>Input</TableHead>
+          <TableHead>Cached</TableHead>
+          <TableHead>Output</TableHead>
+          <TableHead>Reasoning</TableHead>
+          <TableHead>Time</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow>
+          <TableCell>Retrieval</TableCell>
+          <TableCell colSpan={4} />
+          <TableCell>{formatSeconds(usage.retrievalMs)}</TableCell>
+        </TableRow>
+        {calls.map(([label, call]) =>
+          call ? (
+            <TableRow key={label}>
+              <TableCell>{label}</TableCell>
+              <TableCell>{formatNumber(call.inputTokens)}</TableCell>
+              <TableCell>{formatNumber(call.cachedTokens)}</TableCell>
+              <TableCell>{formatNumber(call.outputTokens)}</TableCell>
+              <TableCell>{formatNumber(call.reasoningTokens)}</TableCell>
+              <TableCell>{formatSeconds(call.ms)}</TableCell>
+            </TableRow>
+          ) : null,
+        )}
+      </TableBody>
+    </Table>
+  );
+}
+
+function OperationTable({
+  operations,
+  retrieval,
+}: {
+  operations: MemoryOperation[];
+  retrieval: DataPart<"data-retrieval"> | undefined;
+}) {
+  const before = new Map(
+    retrieval?.memories.map(({ memory }) => [memory.id, memory.content]) ?? [],
+  );
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Action</TableHead>
+          <TableHead>ID</TableHead>
+          <TableHead>Before</TableHead>
+          <TableHead>After</TableHead>
+          <TableHead>Category</TableHead>
+          <TableHead>Result</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {operations.map((operation) => (
+          <TableRow
+            key={`${operation.action}-${operation.memory_id}-${operation.content}`}
+          >
+            <TableCell>{operation.action}</TableCell>
+            <TableCell>{operation.memory_id ?? "new"}</TableCell>
+            <TableCell className="min-w-48 whitespace-normal text-muted-foreground">
+              {operation.memory_id ? before.get(operation.memory_id) : null}
+            </TableCell>
+            <TableCell className="min-w-48 whitespace-normal">
+              {operation.content}
+            </TableCell>
+            <TableCell>
+              {operation.action === "upsert" ? (
+                <div className="flex gap-1">
+                  <Badge variant="secondary">{operation.importance}</Badge>
+                  <Badge variant="outline">{operation.scope}</Badge>
+                </div>
+              ) : null}
+            </TableCell>
+            <TableCell className="whitespace-normal">{operation.result}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+export function DebugDialog({ message }: { message: MemoriUIMessage }) {
+  const trace = collect(message.parts);
+  const failed = trace.errors.length > 0;
+
+  return (
+    <Dialog>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <DialogTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Details"
+                  className={cn(
+                    "text-muted-foreground hover:text-foreground",
+                    failed && "text-destructive hover:text-destructive",
+                  )}
+                />
+              }
+            />
+          }
+        >
+          <IconScanTraces className="size-5" stroke={1.75} />
+        </TooltipTrigger>
+        <TooltipContent>Details</TooltipContent>
+      </Tooltip>
+      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-6xl">
+        <DialogHeader>
+          <DialogTitle>Turn debug</DialogTitle>
+          <DialogDescription>
+            {message.id}
+            {message.metadata?.createdAt
+              ? ` · ${formatDate(message.metadata.createdAt)}`
+              : null}
+          </DialogDescription>
+        </DialogHeader>
+        {trace.errors.map((error) => (
+          <Alert key={error} variant="destructive">
+            <IconAlertCircle />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ))}
+        {trace.usage ? (
+          <Section title="Usage">
+            <UsageTable usage={trace.usage} />
+          </Section>
+        ) : null}
+        {trace.retrieval ? (
+          <Section
+            title={`Retrieval: ${trace.retrieval.memories.length} memories, ${trace.retrieval.recent.length} recent and ${trace.retrieval.similar.length} similar conversations`}
+          >
+            <RetrievalTables data={trace.retrieval} />
+          </Section>
+        ) : null}
+        {trace.prompt ? (
+          <Section title="Chat prompt">
+            <Pre>{trace.prompt}</Pre>
+          </Section>
+        ) : null}
+        {trace.chatReasoning.length > 0 ? (
+          <Section title="Chat reasoning">
+            <Pre>{trace.chatReasoning.join("\n\n")}</Pre>
+          </Section>
+        ) : null}
+        {trace.curation ? (
+          <Section title="Curation input">
+            <Pre>{trace.curation.prompt}</Pre>
+          </Section>
+        ) : null}
+        {trace.curation ? (
+          <Section title="Memory changes">
+            {trace.curation.operations.length > 0 ? (
+              <OperationTable
+                operations={trace.curation.operations}
+                retrieval={trace.retrieval}
+              />
+            ) : (
+              <p className="text-muted-foreground">No memory changes</p>
+            )}
+          </Section>
+        ) : null}
+        {trace.compaction ? (
+          <Section
+            title={`Episode #${trace.compaction.episodeId}, ${trace.compaction.messageCount} messages summarized`}
+          >
+            <p>{trace.compaction.summary}</p>
+          </Section>
+        ) : null}
+        <Section title="Raw parts">
+          <Pre>{JSON.stringify(message.parts, null, 2)}</Pre>
+        </Section>
+      </DialogContent>
+    </Dialog>
+  );
+}

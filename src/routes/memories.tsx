@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { MemoriesPage } from "@/pages/memories/memories-page";
-import { getMemories } from "@/server/functions";
+import { getMemories } from "@/features/memories/server/functions";
+import { MemoriesPage } from "@/features/memories/ui/memories-page";
 
 export const Route = createFileRoute("/memories")({
   loader: () => getMemories(),

@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { createFileRoute } from "@tanstack/react-router";
 
-import { EXTENSIONS, UPLOADS_DIR } from "@/server/memori/uploads";
+import { EXTENSIONS, UPLOADS_DIR } from "@/shared/server/uploads";
 
 const NAME = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}\.(\w+)$/;
 const TYPES = new Map<string, string>(

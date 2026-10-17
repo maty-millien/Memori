@@ -1,0 +1,103 @@
+import { messageText, type Memory, type MemoriUIMessage } from "@/shared/lib/memori";
+import { uploadPath } from "@/shared/server/uploads";
+
+const pad = (value: number) => String(value).padStart(2, "0");
+
+export const timezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+export function localIso(date: Date) {
+  const offset = -date.getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+    `${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`
+  );
+}
+
+export function wrap(tag: string, body: string) {
+  return `<${tag}>\n${body}\n</${tag}>`;
+}
+
+export function timestampedUserContent(content: string, date: Date) {
+  const metadata = `datetime: ${localIso(date)}\ntimezone: ${timezone()}`;
+  return [wrap("message_metadata", metadata), content].join("\n\n");
+}
+
+export function formatMemories(memories: Memory[]) {
+  return memories
+    .map(
+      (memory) =>
+        `- id: "${memory.id}"\n  importance: ${memory.importance}\n  content: ${memory.content}`,
+    )
+    .join("\n");
+}
+
+function formatConversations(memories: Memory[]) {
+  return memories
+    .map(
+      (memory) =>
+        `- [local_datetime: ${localIso(new Date(memory.createdAt))}; timezone: ${timezone()}] ${memory.content}`,
+    )
+    .join("\n");
+}
+
+export function buildContextPrompt(
+  content: string,
+  memories: Memory[],
+  recent: Memory[],
+  similar: Memory[],
+) {
+  const blocks = [];
+  if (recent.length > 0) {
+    blocks.push(wrap("recent_conversations", formatConversations(recent)));
+  }
+  if (similar.length > 0) {
+    blocks.push(wrap("similar_conversations", formatConversations(similar)));
+  }
+  if (memories.length > 0) {
+    blocks.push(wrap("relevant_memories", formatMemories(memories)));
+  }
+  return [...blocks, content].join("\n\n");
+}
+
+export function userContent(message: MemoriUIMessage) {
+  const text = messageText(message.parts).trim();
+  const files = message.parts.flatMap((part) =>
+    part.type === "file"
+      ? [`${part.filename ?? "attachment"} (${uploadPath(part.url)})`]
+      : [],
+  );
+  const note = files.length > 0 ? `[attached: ${files.join(", ")}]` : "";
+  return [text, note].filter(Boolean).join("\n\n");
+}
+
+function assistantLines(message: MemoriUIMessage) {
+  return message.parts.flatMap((part) => {
+    if (part.type === "text" && part.text.trim()) {
+      return [`assistant: ${part.text.trim()}`];
+    }
+    if (part.type === "data-command") {
+      return [`assistant ran: ${part.data.command}`];
+    }
+    if (part.type === "data-search") {
+      return [`assistant searched: ${part.data.query}`];
+    }
+    return [];
+  });
+}
+
+export function transcript(messages: MemoriUIMessage[]) {
+  return messages
+    .flatMap((message) =>
+      message.role === "user"
+        ? [
+            `user: ${timestampedUserContent(
+              userContent(message),
+              new Date(message.metadata?.createdAt ?? Date.now()),
+            )}`,
+          ]
+        : assistantLines(message),
+    )
+    .join("\n");
+}

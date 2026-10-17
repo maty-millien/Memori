@@ -15,4 +15,4 @@ bun install
 bun run dev
 ```
 
-Retrieval and ranking settings are in [`config.ts`](../src/server/memori/config.ts). Data lives in `.memori/memori.db` and attachments in `.memori/uploads`. `bun run check` formats, lints, and type checks.
+Retrieval and ranking settings are in [`config.ts`](../src/features/memories/server/config.ts). Data lives in `.memori/memori.db` and attachments in `.memori/uploads`. `bun run check` formats, lints, and type checks.

@@ -9,10 +9,6 @@ export function formatDate(value: string | null) {
   return value ? dateFormat.format(new Date(value)) : "Never";
 }
 
-export function formatScore(value: number) {
-  return value.toFixed(3);
-}
-
 export function formatNumber(value: number) {
   return numberFormat.format(value);
 }

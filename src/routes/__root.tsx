@@ -7,15 +7,15 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import { Button } from "@/shared/components/ui/button";
+import { Button } from "@/shared/ui/button";
 import {
   Empty,
   EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
-} from "@/shared/components/ui/empty";
-import { TooltipProvider } from "@/shared/components/ui/tooltip";
+} from "@/shared/ui/empty";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import appCss from "../global.css?url";
 

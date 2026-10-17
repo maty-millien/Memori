@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
-import { chatResponse } from "@/server/memori/chat";
-import { ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES } from "@/shared/lib/memori";
+import { chatResponse } from "@/features/chat/server/chat";
+import { ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, messageText } from "@/shared/lib/memori";
 
 const body = z.object({
   message: z.object({
@@ -30,10 +30,7 @@ export const Route = createFileRoute("/api/chat")({
           return new Response("Unsupported message or attachment", { status: 400 });
         }
         const { message } = parsed.data;
-        const text = message.parts
-          .map((part) => (part.type === "text" ? part.text : ""))
-          .join("")
-          .trim();
+        const text = messageText(message.parts).trim();
         const files = message.parts.flatMap((part) =>
           part.type === "file"
             ? [

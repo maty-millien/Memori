@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ChatPage } from "@/pages/chat/chat-page";
-import { getMessages, loadChatOptions } from "@/server/functions";
+import { getMessages, loadChatOptions } from "@/features/chat/server/functions";
+import { ChatPage } from "@/features/chat/ui/chat-page";
 
 export const Route = createFileRoute("/")({
   loader: async () => {

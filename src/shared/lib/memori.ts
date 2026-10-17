@@ -36,6 +36,16 @@ export function effortLabel(effort: string) {
   return effort.charAt(0).toUpperCase() + effort.slice(1);
 }
 
+export function effortFor(model: ChatModel, effort: string | undefined) {
+  return effort && model.efforts.includes(effort) ? effort : model.defaultEffort;
+}
+
+export function messageText(parts: { type: string; text?: string }[], separator = "") {
+  return parts
+    .flatMap((part) => (part.type === "text" ? [part.text ?? ""] : []))
+    .join(separator);
+}
+
 export type Memory = {
   id: string;
   content: string;
@@ -89,9 +99,9 @@ type MemoriData = {
     retrievalMs: number;
     chat: CallUsage;
     curation: CallUsage | null;
-    context?: number;
-    chatModel?: string;
-    chatEffort?: string;
+    context: number;
+    chatModel: string;
+    chatEffort: string;
   };
   error: { message: string };
 };

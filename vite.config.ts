@@ -19,11 +19,7 @@ const config = defineConfig({
       perf: "error",
       suspicious: "error",
     },
-    ignorePatterns: [
-      "src/routeTree.gen.ts",
-      "src/shared/components/ui/**",
-      "src/shared/hooks/use-mobile.ts",
-    ],
+    ignorePatterns: ["src/routeTree.gen.ts", "src/shared/ui/**"],
     options: {
       reportUnusedDisableDirectives: "error",
       typeAware: true,
