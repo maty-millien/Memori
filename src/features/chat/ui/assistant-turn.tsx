@@ -29,7 +29,7 @@ type Part = MemoriUIMessage["parts"][number];
 
 function thoughtDuration(ms: number) {
   const seconds = ms / 1000;
-  if (seconds < 2) return "a moment";
+  if (seconds < 2) return "a second";
   if (seconds < 10) return "a few seconds";
   if (seconds < 45) return `about ${Math.round(seconds / 10) * 10} seconds`;
   if (seconds < 90) return "about a minute";
