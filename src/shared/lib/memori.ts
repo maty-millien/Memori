@@ -3,14 +3,6 @@ import type { UIMessage } from "ai";
 export const SCOPES = ["global", "topical"] as const;
 export const CONTEXT_WINDOW = 100_000;
 export const KINDS = ["memory", "conversation"] as const;
-export const ATTACHMENT_TYPES = [
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "application/pdf",
-] as const;
-export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const IMPORTANCES = [
   "identity",
   "global_preference",
@@ -22,7 +14,6 @@ export const IMPORTANCES = [
 export type Scope = (typeof SCOPES)[number];
 export type Kind = (typeof KINDS)[number];
 export type Importance = (typeof IMPORTANCES)[number];
-export type AttachmentType = (typeof ATTACHMENT_TYPES)[number];
 export type ChatSettings = { model: string; effort: string };
 export type ChatModel = {
   id: string;
@@ -93,6 +84,7 @@ type MemoriData = {
   thought: { ms: number };
   command: { command: string; running: boolean; exitCode: number | null; output: string };
   search: { query: string; running: boolean };
+  read: { path: string; running: boolean };
   curation: { prompt: string; operations: MemoryOperation[] };
   compaction: { episodeId: string; summary: string; messageCount: number };
   usage: {

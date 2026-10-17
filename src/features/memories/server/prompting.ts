@@ -1,5 +1,4 @@
 import { messageText, type Memory, type MemoriUIMessage } from "@/shared/lib/memori";
-import { uploadPath } from "@/shared/server/uploads";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -62,14 +61,7 @@ export function buildContextPrompt(
 }
 
 export function userContent(message: MemoriUIMessage) {
-  const text = messageText(message.parts).trim();
-  const files = message.parts.flatMap((part) =>
-    part.type === "file"
-      ? [`${part.filename ?? "attachment"} (${uploadPath(part.url)})`]
-      : [],
-  );
-  const note = files.length > 0 ? `[attached: ${files.join(", ")}]` : "";
-  return [text, note].filter(Boolean).join("\n\n");
+  return messageText(message.parts).trim();
 }
 
 function assistantLines(message: MemoriUIMessage) {
@@ -79,6 +71,9 @@ function assistantLines(message: MemoriUIMessage) {
     }
     if (part.type === "data-command") {
       return [`assistant ran: ${part.data.command}`];
+    }
+    if (part.type === "data-read") {
+      return [`assistant read: ${part.data.path}`];
     }
     if (part.type === "data-search") {
       return [`assistant searched: ${part.data.query}`];

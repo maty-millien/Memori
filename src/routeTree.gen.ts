@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MemoriesRouteImport } from './routes/memories'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
-import { Route as ApiUploadsNameRouteImport } from './routes/api/uploads/$name'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -29,44 +28,35 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiUploadsNameRoute = ApiUploadsNameRouteImport.update({
-  id: '/api/uploads/$name',
-  path: '/api/uploads/$name',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/memories': typeof MemoriesRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/uploads/$name': typeof ApiUploadsNameRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/memories': typeof MemoriesRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/uploads/$name': typeof ApiUploadsNameRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/memories': typeof MemoriesRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/uploads/$name': typeof ApiUploadsNameRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/memories' | '/api/chat' | '/api/uploads/$name'
+  fullPaths: '/' | '/memories' | '/api/chat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/memories' | '/api/chat' | '/api/uploads/$name'
-  id: '__root__' | '/' | '/memories' | '/api/chat' | '/api/uploads/$name'
+  to: '/' | '/memories' | '/api/chat'
+  id: '__root__' | '/' | '/memories' | '/api/chat'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   MemoriesRoute: typeof MemoriesRoute
   ApiChatRoute: typeof ApiChatRoute
-  ApiUploadsNameRoute: typeof ApiUploadsNameRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -92,13 +82,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/uploads/$name': {
-      id: '/api/uploads/$name'
-      path: '/api/uploads/$name'
-      fullPath: '/api/uploads/$name'
-      preLoaderRoute: typeof ApiUploadsNameRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -106,7 +89,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   MemoriesRoute: MemoriesRoute,
   ApiChatRoute: ApiChatRoute,
-  ApiUploadsNameRoute: ApiUploadsNameRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

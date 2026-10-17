@@ -1,14 +1,7 @@
-import {
-  IconArrowUp,
-  IconFileTypePdf,
-  IconPaperclip,
-  IconPhoto,
-  IconX,
-} from "@tabler/icons-react";
+import { IconArrowUp } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 
-import { ATTACHMENT_TYPES, type ChatModel, type ChatSettings } from "@/shared/lib/memori";
-import { cn } from "@/shared/lib/utils";
+import type { ChatModel, ChatSettings } from "@/shared/lib/memori";
 import { Button } from "@/shared/ui/button";
 import { Spinner } from "@/shared/ui/spinner";
 
@@ -28,44 +21,16 @@ export function Composer({
   models: ChatModel[];
   chatSettings: ChatSettings;
   onChatSettingsChange: (settings: ChatSettings) => void;
-  onSend: (text: string, files: File[]) => void;
+  onSend: (text: string) => void;
 }) {
   const [value, setValue] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
-  const [dragging, setDragging] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
-  const empty = !value.trim() && files.length === 0;
-  const images = models.find((model) => model.id === chatSettings.model)?.images ?? false;
-  const accepted = ATTACHMENT_TYPES.filter(
-    (type) => images || !type.startsWith("image/"),
-  ).join(",");
+  const empty = !value.trim();
 
   useEffect(() => {
     const element = form.current;
     const controller = new AbortController();
-    function over(event: DragEvent) {
-      if (event.dataTransfer?.types.includes("Files")) {
-        event.preventDefault();
-        setDragging(true);
-      }
-    }
-    function leave(event: DragEvent) {
-      if (
-        !(event.relatedTarget instanceof Node && element?.contains(event.relatedTarget))
-      ) {
-        setDragging(false);
-      }
-    }
-    function drop(event: DragEvent) {
-      event.preventDefault();
-      setDragging(false);
-      const dropped = Array.from(event.dataTransfer?.files ?? []).filter((file) =>
-        accepted.split(",").includes(file.type),
-      );
-      setFiles((current) => [...current, ...dropped]);
-    }
     function click(event: MouseEvent) {
       if (
         event.target instanceof Element &&
@@ -74,61 +39,27 @@ export function Composer({
         textarea.current?.focus();
       }
     }
-    element?.addEventListener("dragover", over, controller);
-    element?.addEventListener("dragleave", leave, controller);
-    element?.addEventListener("drop", drop, controller);
     element?.addEventListener("click", click, controller);
     return () => controller.abort();
-  }, [accepted]);
+  }, []);
 
   function submit() {
     if (empty || busy) {
       return;
     }
-    onSend(value.trim(), files);
+    onSend(value.trim());
     setValue("");
-    setFiles([]);
   }
 
   return (
     <form
       ref={form}
-      className={cn(
-        "cursor-text rounded-3xl border border-input bg-popover pt-1 shadow-xs backdrop-blur-xl",
-        dragging && "ring-2 ring-ring",
-      )}
+      className="cursor-text rounded-3xl border border-input bg-popover pt-1 shadow-xs backdrop-blur-xl"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
       }}
     >
-      {files.length > 0 ? (
-        <div className="flex flex-wrap gap-2 px-3 pt-2">
-          {files.map((file, index) => (
-            <div
-              key={`${file.name}-${file.lastModified}-${file.size}`}
-              className="flex items-center gap-1.5 rounded-full bg-accent py-1 pr-1 pl-3 text-sm"
-            >
-              {file.type === "application/pdf" ? (
-                <IconFileTypePdf className="size-4" />
-              ) : (
-                <IconPhoto className="size-4" />
-              )}
-              <span className="max-w-40 truncate">{file.name}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className="rounded-full"
-                onClick={() => setFiles(files.filter((_, other) => other !== index))}
-              >
-                <IconX />
-                <span className="sr-only">Remove {file.name}</span>
-              </Button>
-            </div>
-          ))}
-        </div>
-      ) : null}
       <textarea
         ref={textarea}
         rows={1}
@@ -149,27 +80,6 @@ export function Composer({
       />
       <div className="mt-3 flex w-full items-center justify-between gap-2 p-2">
         <div className="flex items-center gap-2">
-          <input
-            ref={fileInput}
-            type="file"
-            multiple
-            hidden
-            accept={accepted}
-            onChange={(event) => {
-              setFiles([...files, ...Array.from(event.target.files ?? [])]);
-              event.target.value = "";
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="rounded-full"
-            onClick={() => fileInput.current?.click()}
-          >
-            <IconPaperclip />
-            <span className="sr-only">Attach files</span>
-          </Button>
           <ModelMenu
             models={models}
             settings={chatSettings}

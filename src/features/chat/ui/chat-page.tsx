@@ -90,13 +90,7 @@ export function ChatPage({
           setChatSettings(settings);
           void saveChatSettings({ data: settings });
         }}
-        onSend={(text, files) => {
-          const transfer = new DataTransfer();
-          for (const file of files) {
-            transfer.items.add(file);
-          }
-          void sendMessage({ text, files: transfer.files });
-        }}
+        onSend={(text) => void sendMessage({ text })}
       />
     </div>
   );

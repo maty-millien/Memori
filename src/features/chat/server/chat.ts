@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 
 import {
   createUIMessageStream,
@@ -25,7 +25,6 @@ import {
 import { retrieve } from "@/features/memories/server/retrieval";
 import {
   CONTEXT_WINDOW,
-  type AttachmentType,
   type CallUsage,
   type Memory,
   type MemoriUIMessage,
@@ -43,15 +42,8 @@ import {
   saveMessage,
   saveThreadItems,
 } from "@/shared/server/db";
-import { saveUpload } from "@/shared/server/uploads";
 
 import { CHAT_PROMPT } from "./prompts";
-
-export type Attachment = {
-  bytes: Uint8Array;
-  mediaType: AttachmentType;
-  filename: string;
-};
 
 type Chunk = InferUIMessageChunk<MemoriUIMessage>;
 
@@ -94,10 +86,26 @@ const SHELL_MAX_LINES = 2_000;
 const SHELL_MAX_BYTES = 50 * 1024;
 const SHELL_OUTPUT_DIR = ".memori/shell";
 
+const READ_MAX_LINES = 2_000;
+const READ_MAX_LINE_LENGTH = 2_000;
+const READ_MAX_BYTES = 50 * 1024;
+const READ_MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MEDIA_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".pdf": "application/pdf",
+};
+
 type ShellResult = { output: string; exitCode: number | null };
 
+const homePath = (path: string) =>
+  resolve(homedir(), path.replace(/^~(?=$|\/)/, homedir()));
+
 function shell(command: string, workdir: string | null, timeout: number | null) {
-  const cwd = resolve(homedir(), workdir?.replace(/^~(?=$|\/)/, homedir()) ?? ".");
+  const cwd = homePath(workdir ?? ".");
   if (!statSync(cwd, { throwIfNoEntry: false })?.isDirectory()) {
     return Promise.resolve<ShellResult>({
       output: `Working directory is not a directory: ${cwd}`,
@@ -157,6 +165,77 @@ function shell(command: string, workdir: string | null, timeout: number | null) 
   });
 }
 
+function read(
+  path: string,
+  offset: number | null,
+  limit: number | null,
+  images: boolean,
+) {
+  const file = homePath(path);
+  const stats = statSync(file, { throwIfNoEntry: false });
+  if (!stats) {
+    return `File not found: ${file}`;
+  }
+  let lines: string[];
+  if (stats.isDirectory()) {
+    lines = readdirSync(file, { withFileTypes: true })
+      .map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name))
+      .toSorted();
+  } else {
+    if (stats.size > READ_MAX_FILE_BYTES) {
+      return `File is larger than 20 MB: ${file}`;
+    }
+    const bytes = readFileSync(file);
+    const mediaType = MEDIA_TYPES[extname(file).toLowerCase()];
+    const data = `data:${mediaType};base64,${bytes.toString("base64")}`;
+    if (mediaType === "application/pdf") {
+      return [{ type: "input_file", filename: basename(file), file_data: data }];
+    }
+    if (mediaType) {
+      return images
+        ? [{ type: "input_image", image_url: data }]
+        : "The current model can't view images.";
+    }
+    if (bytes.subarray(0, 8192).includes(0)) {
+      return `Cannot read binary file: ${file}`;
+    }
+    if (bytes.length === 0) {
+      return "(empty file)";
+    }
+    lines = bytes
+      .toString("utf8")
+      .replace(/\n$/, "")
+      .split("\n")
+      .map((line, index) =>
+        line.length > READ_MAX_LINE_LENGTH
+          ? `${index + 1}: ${line.slice(0, READ_MAX_LINE_LENGTH)}... (line truncated)`
+          : `${index + 1}: ${line}`,
+      );
+  }
+  const start = Math.max(offset ?? 1, 1) - 1;
+  const shown: string[] = [];
+  let size = 0;
+  for (const line of lines.slice(
+    start,
+    start + Math.min(limit ?? READ_MAX_LINES, READ_MAX_LINES),
+  )) {
+    size += Buffer.byteLength(line) + 1;
+    if (size > READ_MAX_BYTES) {
+      break;
+    }
+    shown.push(line);
+  }
+  const end = start + shown.length;
+  const note =
+    end < lines.length
+      ? `\n\n(Showing ${start + 1}-${end} of ${lines.length}. Use offset ${end + 1} to read more.)`
+      : "";
+  return (
+    (shown.join("\n") ||
+      `Nothing at offset ${start + 1}: there are ${lines.length} lines.`) + note
+  );
+}
+
 function seedItems(history: MemoriUIMessage[]) {
   return history.flatMap((message) =>
     message.role === "user"
@@ -165,21 +244,13 @@ function seedItems(history: MemoriUIMessage[]) {
   );
 }
 
-export function chatResponse(messageId: string, text: string, files: Attachment[]) {
+export function chatResponse(messageId: string, text: string) {
   const history = listLiveMessages();
   const createdAt = new Date();
   const userMessage: MemoriUIMessage = {
     id: messageId,
     role: "user",
-    parts: [
-      ...files.map((file) => ({
-        type: "file" as const,
-        mediaType: file.mediaType,
-        filename: file.filename,
-        url: saveUpload(file.bytes, file.mediaType),
-      })),
-      ...(text ? [{ type: "text" as const, text }] : []),
-    ],
+    parts: [{ type: "text", text }],
     metadata: { createdAt: createdAt.toISOString() },
   };
   let items: Item[] | null = null;
@@ -190,7 +261,9 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
     execute: async ({ writer }) => {
       writer.write({ type: "start" });
 
-      const { settings: chatSettings } = await chatOptions();
+      const { models, settings: chatSettings } = await chatOptions();
+      const images =
+        models.find((model) => model.id === chatSettings.model)?.images ?? false;
       const body = userContent(userMessage);
       const retrievalStarted = performance.now();
       const { live, ...retrieval } = retrieve(
@@ -226,19 +299,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
       const userItem: Item = {
         type: "message",
         role: "user",
-        content: [
-          { type: "input_text", text: prompt },
-          ...files.flatMap((file) =>
-            file.mediaType.startsWith("image/")
-              ? [
-                  {
-                    type: "input_image",
-                    image_url: `data:${file.mediaType};base64,${Buffer.from(file.bytes).toString("base64")}`,
-                  },
-                ]
-              : [],
-          ),
-        ],
+        content: [{ type: "input_text", text: prompt }],
       };
       const chatStarted = performance.now();
       let since: number | null = chatStarted;
@@ -296,12 +357,56 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
           return result.output;
         },
       };
+      const readTool: Tool = {
+        definition: {
+          type: "function",
+          name: "read",
+          description: `Read a file or directory on the user's Mac. Supports text files, images, and PDFs; images and PDFs are shown to you directly. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files in sections. Prefer one larger read over many small slices.`,
+          strict: true,
+          parameters: {
+            type: "object",
+            properties: {
+              path: {
+                type: "string",
+                description:
+                  "File or directory to read, absolute or relative to the user's home directory",
+              },
+              offset: {
+                type: ["integer", "null"],
+                description:
+                  "The line or directory entry to start reading from (1-based)",
+              },
+              limit: {
+                type: ["integer", "null"],
+                description: `The maximum number of lines or directory entries to read (defaults to and capped at ${READ_MAX_LINES})`,
+              },
+            },
+            required: ["path", "offset", "limit"],
+            additionalProperties: false,
+          },
+        },
+        run: async (args, callId) => {
+          const { path, offset, limit } = z
+            .object({
+              path: z.string(),
+              offset: z.number().int().nullable(),
+              limit: z.number().int().positive().nullable(),
+            })
+            .parse(JSON.parse(args));
+          thought();
+          writer.write({ type: "data-read", id: callId, data: { path, running: true } });
+          const result = read(path, offset, limit, images);
+          writer.write({ type: "data-read", id: callId, data: { path, running: false } });
+          since = performance.now();
+          return result;
+        },
+      };
       const reply = await runAgent({
         instructions: CHAT_PROMPT,
         input: [...seedItems(history), userItem],
         model: chatSettings.model,
         effort: chatSettings.effort,
-        tools: [shellTool],
+        tools: [shellTool, readTool],
         webSearch: true,
         onEvent: (event) => {
           if (event.type === "response.output_text.delta" && event.item_id) {

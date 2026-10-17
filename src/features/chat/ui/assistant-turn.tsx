@@ -3,6 +3,7 @@ import {
   IconCheck,
   IconChevronRight,
   IconCopy,
+  IconFile,
   IconTerminal2,
   IconWorldSearch,
 } from "@tabler/icons-react";
@@ -144,6 +145,16 @@ function TimelinePart({ part }: { part: Part }) {
           {part.data.running ? "Searching the web" : "Searched the web"}
         </ToolStep>
       );
+    case "data-read":
+      return (
+        <ToolStep
+          icon={<IconFile />}
+          running={part.data.running}
+          details={[{ label: "Path", text: part.data.path }]}
+        >
+          {part.data.running ? "Reading a file" : "Read a file"}
+        </ToolStep>
+      );
     default:
       return null;
   }
@@ -185,7 +196,8 @@ function isStep(part: Part) {
     part.type === "text" ||
     part.type === "data-thought" ||
     part.type === "data-command" ||
-    part.type === "data-search"
+    part.type === "data-search" ||
+    part.type === "data-read"
   );
 }
 
@@ -201,7 +213,9 @@ export function AssistantTurn({
     streaming &&
     last?.type !== "text" &&
     !(
-      (last?.type === "data-command" || last?.type === "data-search") &&
+      (last?.type === "data-command" ||
+        last?.type === "data-search" ||
+        last?.type === "data-read") &&
       last.data.running
     );
   const text = messageText(message.parts, "\n\n");

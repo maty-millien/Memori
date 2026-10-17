@@ -125,8 +125,7 @@ export function PageHeader({ className }: { className?: string }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Reset everything?</AlertDialogTitle>
             <AlertDialogDescription>
-              This deletes the chat, every memory and episode, the model settings, and all
-              attachments.
+              This deletes the chat, every memory and episode, and the model settings.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

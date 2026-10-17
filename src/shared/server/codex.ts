@@ -58,7 +58,7 @@ type StreamEvent = z.infer<typeof streamEvent>;
 
 export type Tool = {
   definition: { type: "function"; name: string; [key: string]: unknown };
-  run: (args: string, callId: string) => Promise<string>;
+  run: (args: string, callId: string) => Promise<string | Record<string, string>[]>;
 };
 
 type TokenUsage = Omit<CallUsage, "ms">;
