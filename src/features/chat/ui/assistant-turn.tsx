@@ -27,13 +27,13 @@ import { DebugDialog } from "./debug-dialog";
 
 type Part = MemoriUIMessage["parts"][number];
 
-function thoughtDuration(ms: number) {
+function duration(ms: number) {
   const seconds = ms / 1000;
   if (seconds < 2) return "a second";
   if (seconds < 10) return "a few seconds";
-  if (seconds < 45) return `about ${Math.round(seconds / 10) * 10} seconds`;
-  if (seconds < 90) return "about a minute";
-  return `about ${Math.round(seconds / 60)} minutes`;
+  if (seconds < 45) return `${Math.round(seconds / 10) * 10} seconds`;
+  if (seconds < 90) return "a minute";
+  return `${Math.round(seconds / 60)} minutes`;
 }
 
 function Step({
@@ -55,6 +55,18 @@ function Step({
   );
 }
 
+function StepTrigger({ children }: { children: ReactNode }) {
+  return (
+    <CollapsibleTrigger
+      render={<Marker render={<button type="button" />} />}
+      className="cursor-pointer hover:text-foreground"
+    >
+      {children}
+      <IconChevronRight className="opacity-0 transition group-hover/marker:opacity-100 group-data-[panel-open]/marker:rotate-90 group-data-[panel-open]/marker:opacity-100" />
+    </CollapsibleTrigger>
+  );
+}
+
 function ToolStep({
   icon,
   running,
@@ -68,16 +80,12 @@ function ToolStep({
 }) {
   return (
     <Collapsible>
-      <CollapsibleTrigger
-        render={<Marker render={<button type="button" />} />}
-        className="cursor-pointer hover:text-foreground"
-      >
+      <StepTrigger>
         <MarkerIcon>{running ? <Spinner /> : icon}</MarkerIcon>
         <MarkerContent className={cn("truncate", running && "shimmer")}>
           {children}
         </MarkerContent>
-        <IconChevronRight className="opacity-0 transition group-hover/marker:opacity-100 group-data-[panel-open]/marker:rotate-90 group-data-[panel-open]/marker:opacity-100" />
-      </CollapsibleTrigger>
+      </StepTrigger>
       <CollapsibleContent className="mt-2 overflow-hidden rounded-lg border bg-muted/40 text-xs">
         {details.map(({ label, text }) => (
           <div key={label} className="border-b px-3 py-2 last:border-b-0">
@@ -105,9 +113,7 @@ function TimelinePart({ part }: { part: Part }) {
         </Bubble>
       );
     case "data-thought":
-      return (
-        <Step icon={<IconBrain />}>Thought for {thoughtDuration(part.data.ms)}</Step>
-      );
+      return <Step icon={<IconBrain />}>Thought for {duration(part.data.ms)}</Step>;
     case "data-command":
       return (
         <ToolStep
@@ -174,6 +180,15 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+function isStep(part: Part) {
+  return (
+    part.type === "text" ||
+    part.type === "data-thought" ||
+    part.type === "data-command" ||
+    part.type === "data-search"
+  );
+}
+
 export function AssistantTurn({
   message,
   streaming,
@@ -181,13 +196,7 @@ export function AssistantTurn({
   message: MemoriUIMessage;
   streaming: boolean;
 }) {
-  const last = message.parts.findLast(
-    (part) =>
-      part.type === "text" ||
-      part.type === "data-thought" ||
-      part.type === "data-command" ||
-      part.type === "data-search",
-  );
+  const last = message.parts.findLast(isStep);
   const thinking =
     streaming &&
     last?.type !== "text" &&
@@ -196,12 +205,32 @@ export function AssistantTurn({
       last.data.running
     );
   const text = messageText(message.parts, "\n\n");
+  const usage = message.parts.find((part) => part.type === "data-usage");
+  const answerIndex = message.parts.findLastIndex((part) => part.type === "text");
+  const timeline = [...message.parts.entries()].map(([index, part]) => (
+    <TimelinePart key={`${part.type}-${index}`} part={part} />
+  ));
 
   return (
     <div className="flex w-full flex-col gap-3">
-      {[...message.parts.entries()].map(([index, part]) => (
-        <TimelinePart key={`${part.type}-${index}`} part={part} />
-      ))}
+      {!streaming &&
+      usage &&
+      answerIndex > 0 &&
+      message.parts.slice(0, answerIndex).some(isStep) ? (
+        <>
+          <Collapsible>
+            <StepTrigger>
+              <MarkerContent>Worked for {duration(usage.data.chat.ms)}</MarkerContent>
+            </StepTrigger>
+            <CollapsibleContent className="mt-3 flex flex-col gap-3">
+              {timeline.slice(0, answerIndex)}
+            </CollapsibleContent>
+          </Collapsible>
+          {timeline.slice(answerIndex)}
+        </>
+      ) : (
+        timeline
+      )}
       {thinking ? <Step running>Thinking</Step> : null}
       {streaming ? null : (
         <div className="-ml-1.5 flex">
