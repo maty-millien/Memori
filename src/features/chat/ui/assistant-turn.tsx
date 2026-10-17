@@ -9,7 +9,6 @@ import { useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { formatSeconds } from "@/shared/lib/format";
 import { messageText, type MemoriUIMessage } from "@/shared/lib/memori";
 import { cn } from "@/shared/lib/utils";
 import { Bubble, BubbleContent } from "@/shared/ui/bubble";
@@ -21,6 +20,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { DebugDialog } from "./debug-dialog";
 
 type Part = MemoriUIMessage["parts"][number];
+
+function thoughtDuration(ms: number) {
+  const seconds = ms / 1000;
+  if (seconds < 2) return "a moment";
+  if (seconds < 10) return "a few seconds";
+  if (seconds < 45) return `about ${Math.round(seconds / 10) * 10} seconds`;
+  if (seconds < 90) return "about a minute";
+  return `about ${Math.round(seconds / 60)} minutes`;
+}
 
 function Step({
   icon,
@@ -54,7 +62,9 @@ function TimelinePart({ part }: { part: Part }) {
         </Bubble>
       );
     case "data-thought":
-      return <Step icon={<IconBrain />}>Thought for {formatSeconds(part.data.ms)}</Step>;
+      return (
+        <Step icon={<IconBrain />}>Thought for {thoughtDuration(part.data.ms)}</Step>
+      );
     case "data-command":
       return (
         <Step icon={<IconTerminal2 />} running={part.data.running}>
