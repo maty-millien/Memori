@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
+import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { resolve } from "node:path";
 
 import {
   createUIMessageStream,
@@ -87,17 +89,71 @@ const errorMessage = (error: unknown) =>
 
 const memoryKey = (memory: Memory) => `${memory.id}@${memory.updatedAt}`;
 
-function shell(command: string) {
-  return new Promise<{ output: string; exitCode: number | null }>((resolve) => {
-    const child = spawn("/bin/zsh", ["-lc", command], {
-      cwd: homedir(),
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 600_000,
+const SHELL_TIMEOUT_MS = 120_000;
+const SHELL_MAX_LINES = 2_000;
+const SHELL_MAX_BYTES = 50 * 1024;
+const SHELL_OUTPUT_DIR = ".memori/shell";
+
+type ShellResult = { output: string; exitCode: number | null };
+
+function shell(command: string, workdir: string | null, timeout: number | null) {
+  const cwd = resolve(homedir(), workdir?.replace(/^~(?=$|\/)/, homedir()) ?? ".");
+  if (!statSync(cwd, { throwIfNoEntry: false })?.isDirectory()) {
+    return Promise.resolve<ShellResult>({
+      output: `Working directory is not a directory: ${cwd}`,
+      exitCode: null,
     });
-    let output = "";
-    child.stdout.on("data", (chunk) => (output += chunk));
-    child.stderr.on("data", (chunk) => (output += chunk));
-    child.on("close", (exitCode) => resolve({ output: output.slice(-20_000), exitCode }));
+  }
+  const ms = timeout ?? SHELL_TIMEOUT_MS;
+  return new Promise<ShellResult>((done) => {
+    const child = spawn("/bin/zsh", ["-c", command], {
+      cwd,
+      env: { ...process.env, TERM: "xterm-256color", AGENT: "1" },
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    });
+    const chunks: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => chunks.push(chunk));
+    const kill = (signal: NodeJS.Signals) => {
+      try {
+        process.kill(-child.pid!, signal);
+      } catch {}
+    };
+    let timedOut = false;
+    const timer =
+      ms > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            kill("SIGTERM");
+            setTimeout(() => kill("SIGKILL"), 3_000).unref();
+          }, ms)
+        : undefined;
+    child.on("close", (exitCode, signal) => {
+      clearTimeout(timer);
+      const text = Buffer.concat(chunks).toString("utf8");
+      const lines = text.replace(/\n$/, "").split("\n");
+      let shown = lines.slice(-SHELL_MAX_LINES).join("\n");
+      if (Buffer.byteLength(shown) > SHELL_MAX_BYTES) {
+        shown = Buffer.from(shown).subarray(-SHELL_MAX_BYTES).toString("utf8");
+      }
+      let body = shown || "(no output)";
+      if (shown.length < lines.join("\n").length) {
+        mkdirSync(SHELL_OUTPUT_DIR, { recursive: true });
+        const file = resolve(SHELL_OUTPUT_DIR, `${crypto.randomUUID()}.out`);
+        writeFileSync(file, text);
+        const count = shown.split("\n").length;
+        body += `\n\n[showing lines ${lines.length - count + 1}-${lines.length} of ${lines.length}; full output saved to ${file}]`;
+      }
+      const status = timedOut
+        ? `Command exceeded timeout of ${ms} ms. Retry with a larger timeout if the command is expected to take longer.`
+        : signal
+          ? `Killed by ${signal}`
+          : exitCode !== 0
+            ? `Exited with code ${exitCode}`
+            : "";
+      done({ output: [body, status].filter(Boolean).join("\n\n"), exitCode });
+    });
   });
 }
 
@@ -199,29 +255,45 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
         definition: {
           type: "function",
           name: "shell",
-          description:
-            "Run a zsh command on the user's Mac from their home directory and return its exit code and combined output.",
+          description: `Run a zsh command on the user's Mac and return its combined output. Quote file paths containing spaces or special characters. When output is large, the full result is saved to a file and the last ${SHELL_MAX_LINES} lines are returned.`,
           strict: true,
           parameters: {
             type: "object",
-            properties: { command: { type: "string" } },
-            required: ["command"],
+            properties: {
+              command: { type: "string", description: "Shell command string to execute" },
+              workdir: {
+                type: ["string", "null"],
+                description:
+                  "Working directory to execute the command in. Defaults to the user's home directory. Set it here instead of changing directories in the command.",
+              },
+              timeout: {
+                type: ["integer", "null"],
+                description: `Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to ${SHELL_TIMEOUT_MS}.`,
+              },
+            },
+            required: ["command", "workdir", "timeout"],
             additionalProperties: false,
           },
         },
         run: async (args, callId) => {
-          const { command } = z.object({ command: z.string() }).parse(JSON.parse(args));
+          const { command, workdir, timeout } = z
+            .object({
+              command: z.string(),
+              workdir: z.string().nullable(),
+              timeout: z.number().int().nonnegative().nullable(),
+            })
+            .parse(JSON.parse(args));
           const data = { command, running: true, exitCode: null, output: "" };
           thought();
           writer.write({ type: "data-command", id: callId, data });
-          const result = await shell(command);
+          const result = await shell(command, workdir, timeout);
           writer.write({
             type: "data-command",
             id: callId,
             data: { ...data, running: false, ...result },
           });
           since = performance.now();
-          return `exit code: ${result.exitCode}\n${result.output}`;
+          return result.output;
         },
       };
       const reply = await runAgent({
