@@ -1,7 +1,11 @@
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  type InferUIMessageChunk,
+} from "ai";
 import { z } from "zod";
 
 import { SETTINGS } from "@/features/memories/server/config";
@@ -46,6 +50,37 @@ export type Attachment = {
   mediaType: AttachmentType;
   filename: string;
 };
+
+type Chunk = InferUIMessageChunk<MemoriUIMessage>;
+
+let activeTurn: {
+  userMessage: MemoriUIMessage;
+  chunks: Chunk[];
+  followers: Set<ReadableStreamDefaultController<Chunk>>;
+} | null = null;
+
+export const activeUserMessage = () => activeTurn?.userMessage;
+
+export function resumeResponse() {
+  const turn = activeTurn;
+  if (!turn) {
+    return new Response(null, { status: 204 });
+  }
+  let follower: ReadableStreamDefaultController<Chunk>;
+  const stream = new ReadableStream<Chunk>({
+    start(controller) {
+      follower = controller;
+      for (const chunk of turn.chunks) {
+        controller.enqueue(chunk);
+      }
+      turn.followers.add(controller);
+    },
+    cancel() {
+      turn.followers.delete(follower);
+    },
+  });
+  return createUIMessageStreamResponse({ stream });
+}
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -310,6 +345,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
       items = [userItem, ...reply.items];
     },
     onEnd: ({ responseMessage }) => {
+      activeTurn = null;
       if (!items) {
         return;
       }
@@ -322,5 +358,22 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
     },
   });
 
-  return createUIMessageStreamResponse({ stream });
+  const turn = {
+    userMessage,
+    chunks: [] as Chunk[],
+    followers: new Set<ReadableStreamDefaultController<Chunk>>(),
+  };
+  activeTurn = turn;
+  void (async () => {
+    for await (const chunk of stream) {
+      turn.chunks.push(chunk);
+      for (const follower of turn.followers) {
+        follower.enqueue(chunk);
+      }
+    }
+    for (const follower of turn.followers) {
+      follower.close();
+    }
+  })();
+  return resumeResponse();
 }

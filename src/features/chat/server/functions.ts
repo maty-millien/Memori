@@ -4,9 +4,12 @@ import { z } from "zod";
 import { chatOptions } from "@/shared/server/codex";
 import { listMessages, setChatSettings } from "@/shared/server/db";
 
-export const getMessages = createServerFn({ strict: { output: false } }).handler(() =>
-  listMessages(),
-);
+import { activeUserMessage } from "./chat";
+
+export const getMessages = createServerFn({ strict: { output: false } }).handler(() => {
+  const userMessage = activeUserMessage();
+  return userMessage ? [...listMessages(), userMessage] : listMessages();
+});
 
 export const loadChatOptions = createServerFn().handler(() => chatOptions());
 

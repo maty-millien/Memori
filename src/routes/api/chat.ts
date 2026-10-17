@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
-import { chatResponse } from "@/features/chat/server/chat";
+import { chatResponse, resumeResponse } from "@/features/chat/server/chat";
 import { ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, messageText } from "@/shared/lib/memori";
 
 const body = z.object({
@@ -24,6 +24,7 @@ const body = z.object({
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
+      GET: () => resumeResponse(),
       POST: async ({ request }) => {
         const parsed = body.safeParse(await request.json());
         if (!parsed.success) {

@@ -1,6 +1,6 @@
-import { useChat } from "@ai-sdk/react";
+import { Chat, useChat } from "@ai-sdk/react";
 import { IconAlertCircle } from "@tabler/icons-react";
-import { useRouter } from "@tanstack/react-router";
+import { useRouter, type AnyRouter } from "@tanstack/react-router";
 import { DefaultChatTransport } from "ai";
 import { useState } from "react";
 
@@ -20,6 +20,30 @@ import {
 import { AssistantTurn } from "./assistant-turn";
 import { Composer } from "./composer";
 import { UserTurn } from "./user-turn";
+
+let browserChat: Chat<MemoriUIMessage> | undefined;
+
+function getChat(initialMessages: MemoriUIMessage[], router: AnyRouter) {
+  const create = () =>
+    new Chat<MemoriUIMessage>({
+      messages: initialMessages,
+      transport: new DefaultChatTransport<MemoriUIMessage>({
+        api: "/api/chat",
+        prepareSendMessagesRequest: ({ messages }) => ({
+          body: { message: messages.at(-1) },
+        }),
+        prepareReconnectToStreamRequest: () => ({ api: "/api/chat" }),
+      }),
+      onFinish: () => {
+        void router.invalidate();
+      },
+    });
+  if (typeof window === "undefined") {
+    return create();
+  }
+  browserChat ??= create();
+  return browserChat;
+}
 
 function contextTokens(messages: MemoriUIMessage[]) {
   for (const message of messages.toReversed()) {
@@ -43,22 +67,8 @@ export function ChatPage({
 }) {
   const router = useRouter();
   const [chatSettings, setChatSettings] = useState(initialChatSettings);
-  const [transport] = useState(
-    () =>
-      new DefaultChatTransport<MemoriUIMessage>({
-        api: "/api/chat",
-        prepareSendMessagesRequest: ({ messages }) => ({
-          body: { message: messages.at(-1) },
-        }),
-      }),
-  );
-  const { messages, sendMessage, status, error } = useChat<MemoriUIMessage>({
-    messages: initialMessages,
-    transport,
-    onFinish: () => {
-      void router.invalidate();
-    },
-  });
+  const [chat] = useState(() => getChat(initialMessages, router));
+  const { messages, sendMessage, status, error } = useChat({ chat, resume: true });
   const busy = status === "submitted" || status === "streaming";
   const lastId = messages.at(-1)?.id;
 
