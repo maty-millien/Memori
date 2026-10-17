@@ -49,7 +49,7 @@ const streamEvent = z.looseObject({
     .optional(),
 });
 
-export type StreamEvent = z.infer<typeof streamEvent>;
+type StreamEvent = z.infer<typeof streamEvent>;
 
 export type Tool = {
   definition: { type: "function"; name: string; [key: string]: unknown };

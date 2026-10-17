@@ -71,37 +71,12 @@ function shell(command: string) {
   });
 }
 
-function seedItems(history: MemoriUIMessage[]): Item[] {
-  return history.flatMap((message, index) => {
-    if (message.role === "user") {
-      return [];
-    }
-    const stored = getThreadItems(message.id);
-    if (stored) {
-      return z.array(itemSchema).parse(stored);
-    }
-    const prompt = message.parts.find((part) => part.type === "data-prompt")?.data.prompt;
-    const previous = history[index - 1];
-    const user =
-      prompt ??
-      (previous
-        ? timestampedUserContent(
-            userContent(previous),
-            new Date(previous.metadata?.createdAt ?? Date.now()),
-          )
-        : "");
-    const reply = message.parts
-      .flatMap((part) => (part.type === "text" ? [part.text] : []))
-      .join("\n\n");
-    return [
-      { type: "message", role: "user", content: [{ type: "input_text", text: user }] },
-      {
-        type: "message",
-        role: "assistant",
-        content: [{ type: "output_text", text: reply }],
-      },
-    ];
-  });
+function seedItems(history: MemoriUIMessage[]) {
+  return history.flatMap((message) =>
+    message.role === "user"
+      ? []
+      : z.array(itemSchema).parse(getThreadItems(message.id) ?? []),
+  );
 }
 
 export function chatResponse(messageId: string, text: string, files: Attachment[]) {
