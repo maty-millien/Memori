@@ -1,4 +1,8 @@
+import { spawn } from "node:child_process";
+import { homedir } from "node:os";
+
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+import { z } from "zod";
 
 import {
   CONTEXT_WINDOW,
@@ -10,10 +14,10 @@ import {
 
 import {
   chatOptions,
-  runTurn,
-  startThread,
-  codexClient,
-  type Thread,
+  itemSchema,
+  runAgent,
+  type Item,
+  type Tool,
   type TurnUsage,
 } from "./codex";
 import { SETTINGS } from "./config";
@@ -30,7 +34,7 @@ import {
 import { CHAT_PROMPT } from "./prompts";
 import { retrieve } from "./retrieval";
 import { transcript, userContent } from "./transcript";
-import { saveUpload, uploadPath } from "./uploads";
+import { saveUpload } from "./uploads";
 
 export type Attachment = {
   bytes: Uint8Array;
@@ -38,13 +42,8 @@ export type Attachment = {
   filename: string;
 };
 
-let chat: { thread: Thread; messages: string[] } | null = null;
-
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
-
-const unwrapShell = (command: string) =>
-  /^\/bin\/zsh -lc (['"])([\s\S]*)\1$/.exec(command)?.[2] ?? command;
 
 const memoryKey = (memory: Memory) => `${memory.id}@${memory.updatedAt}`;
 
@@ -58,14 +57,28 @@ function callUsage(usage: TurnUsage, ms: number): CallUsage {
   };
 }
 
-function seedItems(history: MemoriUIMessage[]) {
+function shell(command: string) {
+  return new Promise<{ output: string; exitCode: number | null }>((resolve) => {
+    const child = spawn("/bin/zsh", ["-lc", command], {
+      cwd: homedir(),
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 600_000,
+    });
+    let output = "";
+    child.stdout.on("data", (chunk) => (output += chunk));
+    child.stderr.on("data", (chunk) => (output += chunk));
+    child.on("close", (exitCode) => resolve({ output: output.slice(-20_000), exitCode }));
+  });
+}
+
+function seedItems(history: MemoriUIMessage[]): Item[] {
   return history.flatMap((message, index) => {
     if (message.role === "user") {
       return [];
     }
     const stored = getThreadItems(message.id);
     if (stored) {
-      return stored;
+      return z.array(itemSchema).parse(stored);
     }
     const prompt = message.parts.find((part) => part.type === "data-prompt")?.data.prompt;
     const previous = history[index - 1];
@@ -91,24 +104,6 @@ function seedItems(history: MemoriUIMessage[]) {
   });
 }
 
-async function chatThread(history: MemoriUIMessage[]) {
-  const ids = history.map((message) => message.id);
-  if (
-    chat &&
-    chat.thread.client === (await codexClient()) &&
-    chat.messages.join() === ids.join()
-  ) {
-    return chat;
-  }
-  const thread = await startThread(CHAT_PROMPT, true);
-  const items = seedItems(history);
-  if (items.length > 0) {
-    await thread.client.request("thread/inject_items", { threadId: thread.id, items });
-  }
-  chat = { thread, messages: ids };
-  return chat;
-}
-
 export function chatResponse(messageId: string, text: string, files: Attachment[]) {
   const history = listLiveMessages();
   const createdAt = new Date();
@@ -126,7 +121,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
     ],
     metadata: { createdAt: createdAt.toISOString() },
   };
-  let turn: { session: NonNullable<typeof chat>; items: unknown[] } | null = null;
+  let items: Item[] | null = null;
 
   const stream = createUIMessageStream<MemoriUIMessage>({
     originalMessages: [...history, userMessage],
@@ -167,7 +162,23 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
       writer.write({ type: "data-retrieval", data: retrieval });
       writer.write({ type: "data-prompt", data: { prompt } });
 
-      const session = await chatThread(history);
+      const userItem: Item = {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "input_text", text: prompt },
+          ...files.flatMap((file) =>
+            file.mediaType.startsWith("image/")
+              ? [
+                  {
+                    type: "input_image",
+                    image_url: `data:${file.mediaType};base64,${Buffer.from(file.bytes).toString("base64")}`,
+                  },
+                ]
+              : [],
+          ),
+        ],
+      };
       const chatStarted = performance.now();
       let since: number | null = chatStarted;
       const thought = () => {
@@ -179,87 +190,100 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
           since = null;
         }
       };
-      const reply = await runTurn(session.thread, {
-        text: prompt,
+      const shellTool: Tool = {
+        definition: {
+          type: "function",
+          name: "shell",
+          description:
+            "Run a zsh command on the user's Mac from their home directory and return its exit code and combined output.",
+          strict: true,
+          parameters: {
+            type: "object",
+            properties: { command: { type: "string" } },
+            required: ["command"],
+            additionalProperties: false,
+          },
+        },
+        run: async (args, callId) => {
+          const { command } = z.object({ command: z.string() }).parse(JSON.parse(args));
+          const data = { command, running: true, exitCode: null, output: "" };
+          thought();
+          writer.write({ type: "data-command", id: callId, data });
+          const result = await shell(command);
+          writer.write({
+            type: "data-command",
+            id: callId,
+            data: { ...data, running: false, ...result },
+          });
+          since = performance.now();
+          return `exit code: ${result.exitCode}\n${result.output}`;
+        },
+      };
+      const reply = await runAgent({
+        instructions: CHAT_PROMPT,
+        input: [...seedItems(history), userItem],
         model: chatSettings.model,
         effort: chatSettings.effort,
-        images: userMessage.parts.flatMap((part) =>
-          part.type === "file" && part.mediaType.startsWith("image/")
-            ? [uploadPath(part.url)]
-            : [],
-        ),
-        onNotification: (notification) => {
-          if (notification.method === "item/agentMessage/delta") {
+        tools: [shellTool],
+        webSearch: true,
+        onEvent: (event) => {
+          if (event.type === "response.output_text.delta" && event.item_id) {
             writer.write({
               type: "text-delta",
-              id: notification.params.itemId,
-              delta: notification.params.delta,
+              id: event.item_id,
+              delta: event.delta ?? "",
             });
             return;
           }
+          const output = event.item;
           if (
-            notification.method !== "item/started" &&
-            notification.method !== "item/completed"
+            !output ||
+            (event.type !== "response.output_item.added" &&
+              event.type !== "response.output_item.done")
           ) {
             return;
           }
-          const { item } = notification.params;
-          const done = notification.method === "item/completed";
-          switch (item.type) {
-            case "reasoning":
-              if (done && item.summary.length > 0) {
-                writer.write({ type: "reasoning-start", id: item.id });
+          const id = output.id ?? "";
+          const done = event.type === "response.output_item.done";
+          switch (output.type) {
+            case "reasoning": {
+              const summary = (output.summary ?? []).map((part) => part.text);
+              if (done && summary.length > 0) {
+                writer.write({ type: "reasoning-start", id });
                 writer.write({
                   type: "reasoning-delta",
-                  id: item.id,
-                  delta: item.summary.join("\n\n"),
+                  id,
+                  delta: summary.join("\n\n"),
                 });
-                writer.write({ type: "reasoning-end", id: item.id });
+                writer.write({ type: "reasoning-end", id });
               }
               break;
-            case "agentMessage":
+            }
+            case "message":
               if (done) {
-                writer.write({ type: "text-end", id: item.id });
+                writer.write({ type: "text-end", id });
                 since = performance.now();
               } else {
                 thought();
-                writer.write({ type: "text-start", id: item.id });
+                writer.write({ type: "text-start", id });
               }
               break;
-            case "commandExecution":
-              thought();
-              writer.write({
-                type: "data-command",
-                id: item.id,
-                data: {
-                  command: unwrapShell(item.command),
-                  running: !done,
-                  exitCode: item.exitCode,
-                  output: (item.aggregatedOutput ?? "").slice(-20_000),
-                },
-              });
-              if (done) {
-                since = performance.now();
-              }
-              break;
-            case "webSearch":
+            case "web_search_call": {
               thought();
               writer.write({
                 type: "data-search",
-                id: item.id,
-                data: { query: item.query, running: !done },
+                id,
+                data: { query: output.action?.query ?? "", running: !done },
               });
               if (done) {
                 since = performance.now();
               }
               break;
+            }
             default:
               break;
           }
         },
-      }).catch((error: unknown) => {
-        chat = null;
-        throw error;
       });
       const chatUsage = callUsage(
         reply.usage,
@@ -313,10 +337,10 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
         },
       });
       writer.write({ type: "finish" });
-      turn = { session, items: reply.items };
+      items = [userItem, ...reply.items];
     },
     onEnd: ({ responseMessage }) => {
-      if (!turn) {
+      if (!items) {
         return;
       }
       saveMessage(userMessage);
@@ -324,8 +348,7 @@ export function chatResponse(messageId: string, text: string, files: Attachment[
         ...responseMessage,
         metadata: { createdAt: new Date().toISOString() },
       });
-      saveThreadItems(responseMessage.id, turn.items);
-      turn.session.messages.push(userMessage.id, responseMessage.id);
+      saveThreadItems(responseMessage.id, items);
     },
   });
 

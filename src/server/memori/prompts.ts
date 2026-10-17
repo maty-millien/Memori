@@ -59,7 +59,6 @@ Curate based on what the user said in \`<latest_turn>\`. The assistant reply is 
 - If the user restates something already in the retrieved memories without contradicting or refining it, do nothing.
 - Never upsert an existing memory without changing its meaning. Do not rewrite, confirm, or refresh memories that are still accurate.
 - If the turn contains nothing durable, do nothing.
-- Never run commands or search the web.
 
 # Scope (only when creating a new memory)
 
@@ -70,4 +69,4 @@ Curate based on what the user said in \`<latest_turn>\`. The assistant reply is 
 export const SUMMARY_PROMPT =
   "Summarize the conversation in one short paragraph. Reply with the summary only. " +
   "Write it in the third person, focusing on the topics discussed, what the user wanted, " +
-  "and what was decided. Skip greetings and small talk. Never run commands or search the web.";
+  "and what was decided. Skip greetings and small talk.";

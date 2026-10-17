@@ -1,8 +1,6 @@
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, symlinkSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { createInterface } from "node:readline";
+import { readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 import { z } from "zod";
 
@@ -12,166 +10,157 @@ import { getChatSettings } from "./db";
 
 const MODEL = "gpt-6-luna";
 const REASONING_EFFORT = "low";
-const CODEX_HOME = resolve(".memori/codex");
+const BASE_URL = "https://chatgpt.com/backend-api/codex";
+const CLIENT_VERSION = "0.163.0";
+const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+const AUTH_PATH = join(process.env.CODEX_HOME || join(homedir(), ".codex"), "auth.json");
 
-type CodexItem =
-  | { type: "userMessage"; id: string }
-  | { type: "agentMessage"; id: string; text: string }
-  | { type: "reasoning"; id: string; summary: string[] }
-  | {
-      type: "commandExecution";
-      id: string;
-      command: string;
-      aggregatedOutput: string | null;
-      exitCode: number | null;
-    }
-  | { type: "webSearch"; id: string; query: string };
+export const itemSchema = z.looseObject({
+  type: z.string(),
+  id: z.string().optional(),
+  name: z.string().optional(),
+  call_id: z.string().optional(),
+  arguments: z.string().optional(),
+  summary: z.array(z.looseObject({ text: z.string() })).optional(),
+  action: z.looseObject({ query: z.string().optional() }).optional(),
+  content: z.array(z.looseObject({ text: z.string().optional() })).optional(),
+});
 
-type RawItem = { type: string; role?: string; content?: { text?: string }[] };
+export type Item = z.infer<typeof itemSchema>;
 
-type Usage = {
+const streamEvent = z.looseObject({
+  type: z.string(),
+  item: itemSchema.optional(),
+  item_id: z.string().optional(),
+  delta: z.string().optional(),
+  message: z.string().optional(),
+  response: z
+    .looseObject({
+      usage: z
+        .object({
+          input_tokens: z.number(),
+          input_tokens_details: z.object({ cached_tokens: z.number() }).nullish(),
+          output_tokens: z.number(),
+          output_tokens_details: z.object({ reasoning_tokens: z.number() }).nullish(),
+        })
+        .nullish(),
+      error: z.object({ message: z.string() }).nullish(),
+    })
+    .optional(),
+});
+
+export type StreamEvent = z.infer<typeof streamEvent>;
+
+export type Tool = {
+  definition: { type: "function"; name: string; [key: string]: unknown };
+  run: (args: string, callId: string) => Promise<string>;
+};
+
+export type TurnUsage = {
   inputTokens: number;
   cachedInputTokens: number;
   outputTokens: number;
   reasoningOutputTokens: number;
+  context: number;
 };
 
-type CodexNotification =
-  | {
-      method: "item/started" | "item/completed";
-      params: { threadId: string; item: CodexItem };
-    }
-  | {
-      method: "item/agentMessage/delta";
-      params: { threadId: string; itemId: string; delta: string };
-    }
-  | { method: "rawResponseItem/completed"; params: { threadId: string; item: RawItem } }
-  | {
-      method: "thread/tokenUsage/updated";
-      params: {
-        threadId: string;
-        tokenUsage: { last: Usage };
-      };
-    }
-  | {
-      method: "turn/completed";
-      params: {
-        threadId: string;
-        turn: { status: string; error: { message: string } | null };
-      };
-    };
+const authFile = z.looseObject({
+  tokens: z.looseObject({
+    access_token: z.string(),
+    refresh_token: z.string(),
+    account_id: z.string(),
+  }),
+});
 
-type Message =
-  | (CodexNotification & { id?: number })
-  | { id: number; method?: undefined; result?: unknown; error?: { message: string } };
+const refreshed = z.object({
+  access_token: z.string(),
+  refresh_token: z.string(),
+  id_token: z.string(),
+});
 
-type Client = {
-  request: (method: string, params: unknown) => Promise<unknown>;
-  listeners: Set<(notification: CodexNotification) => void>;
-};
-
-export type Thread = { client: Client; id: string };
-
-export type TurnUsage = Usage & { context: number };
-
-let current: Promise<Client> | null = null;
-
-async function createClient() {
-  mkdirSync(CODEX_HOME, { recursive: true });
-  const auth = join(CODEX_HOME, "auth.json");
-  if (!existsSync(auth)) {
-    symlinkSync(
-      join(process.env.CODEX_HOME || join(homedir(), ".codex"), "auth.json"),
-      auth,
+async function credentials() {
+  const auth = authFile.parse(JSON.parse(readFileSync(AUTH_PATH, "utf8")));
+  const { exp } = z
+    .object({ exp: z.number() })
+    .parse(
+      JSON.parse(
+        Buffer.from(auth.tokens.access_token.split(".")[1], "base64url").toString(),
+      ),
     );
+  if (exp * 1000 > Date.now() + 60_000) {
+    return auth.tokens;
   }
-  const child = spawn("codex", ["app-server"], {
-    cwd: tmpdir(),
-    env: { ...process.env, CODEX_HOME },
+  const response = await fetch("https://auth.openai.com/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: CLIENT_ID,
+      grant_type: "refresh_token",
+      refresh_token: auth.tokens.refresh_token,
+      scope: "openid profile email",
+    }),
   });
-  const pending = new Map<
-    number,
-    { resolve: (value: unknown) => void; reject: (error: Error) => void }
-  >();
-  const listeners = new Set<(notification: CodexNotification) => void>();
-  let nextId = 1;
-  const send = (message: unknown) => child.stdin.write(`${JSON.stringify(message)}\n`);
-  child.stderr.resume();
-  child.on("exit", () => {
-    current = null;
-    for (const { reject } of pending.values()) {
-      reject(new Error("Codex app-server exited"));
-    }
-  });
-  createInterface({ input: child.stdout }).on("line", (line) => {
-    const message: Message = JSON.parse(line);
-    if (message.method === undefined) {
-      const request = pending.get(message.id);
-      pending.delete(message.id);
-      if (message.error) {
-        request?.reject(new Error(message.error.message));
-      } else {
-        request?.resolve(message.result);
-      }
-    } else if (message.id === undefined) {
-      for (const listener of listeners) {
-        listener(message);
-      }
-    } else {
-      send({ id: message.id, error: { code: -32601, message: "Unsupported request" } });
-    }
-  });
-  const request = (method: string, params: unknown) =>
-    new Promise<unknown>((resolvePromise, reject) => {
-      const id = nextId++;
-      pending.set(id, { resolve: resolvePromise, reject });
-      send({ id, method, params });
-    });
-  await request("initialize", {
-    clientInfo: { name: "memori", title: "Memori", version: "1.0.0" },
-    capabilities: { experimentalApi: true, requestAttestation: false },
-  });
-  send({ method: "initialized" });
-  return { request, listeners };
+  if (!response.ok) {
+    throw new Error(`Codex token refresh failed: ${await response.text()}`);
+  }
+  const tokens = { ...auth.tokens, ...refreshed.parse(await response.json()) };
+  writeFileSync(
+    AUTH_PATH,
+    JSON.stringify({ ...auth, tokens, last_refresh: new Date().toISOString() }, null, 2),
+  );
+  return tokens;
 }
 
-export function codexClient() {
-  current ??= createClient();
-  return current;
+async function codexFetch(
+  path: string,
+  init: { method?: string; headers?: Record<string, string>; body?: string } = {},
+) {
+  const tokens = await credentials();
+  const response = await fetch(`${BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${tokens.access_token}`,
+      "chatgpt-account-id": tokens.account_id,
+      originator: "codex_cli_rs",
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Codex ${response.status}: ${await response.text()}`);
+  }
+  return response;
 }
-
-const threadStart = z.object({ thread: z.object({ id: z.string() }) });
 
 const modelList = z.object({
-  data: z.array(
+  models: z.array(
     z.object({
-      model: z.string(),
-      displayName: z.string(),
-      hidden: z.boolean(),
-      isDefault: z.boolean(),
-      defaultReasoningEffort: z.string(),
-      inputModalities: z.array(z.string()),
-      supportedReasoningEfforts: z.array(z.object({ reasoningEffort: z.string() })),
+      slug: z.string(),
+      display_name: z.string(),
+      visibility: z.string(),
+      priority: z.number(),
+      default_reasoning_level: z.string(),
+      input_modalities: z.array(z.string()),
+      supported_reasoning_levels: z.array(z.object({ effort: z.string() })),
     }),
   ),
 });
 
 export async function chatOptions() {
-  const client = await codexClient();
-  const { data } = modelList.parse(await client.request("model/list", {}));
-  const visible = data.filter((item) => !item.hidden);
-  const models: ChatModel[] = visible.map((item) => ({
-    id: item.model,
-    name: item.displayName,
-    efforts: item.supportedReasoningEfforts.map((effort) => effort.reasoningEffort),
-    defaultEffort: item.defaultReasoningEffort,
-    images: item.inputModalities.includes("image"),
-  }));
+  const response = await codexFetch(`/models?client_version=${CLIENT_VERSION}`);
+  const models: ChatModel[] = modelList
+    .parse(await response.json())
+    .models.filter((model) => model.visibility === "list")
+    .toSorted((a, b) => a.priority - b.priority)
+    .map((model) => ({
+      id: model.slug,
+      name: model.display_name,
+      efforts: model.supported_reasoning_levels.map((level) => level.effort),
+      defaultEffort: model.default_reasoning_level,
+      images: model.input_modalities.includes("image"),
+    }));
   const stored = getChatSettings();
-  const model =
-    models.find((item) => item.id === stored.model) ??
-    models[visible.findIndex((item) => item.isDefault)] ??
-    models[0];
+  const model = models.find((entry) => entry.id === stored.model) ?? models[0];
   const settings: ChatSettings = {
     model: model.id,
     effort:
@@ -182,126 +171,133 @@ export async function chatOptions() {
   return { models, settings };
 }
 
-export async function startThread(
-  instructions: string,
-  webSearch: boolean,
-): Promise<Thread> {
-  const client = await codexClient();
-  const result = await client.request("thread/start", {
-    cwd: tmpdir(),
-    approvalPolicy: "never",
-    sandbox: "danger-full-access",
-    baseInstructions: instructions,
-    ephemeral: true,
-    experimentalRawEvents: true,
-    config: {
-      web_search: webSearch ? "live" : "disabled",
-      skills: { include_instructions: false },
-    },
+async function* respond(body: object) {
+  const response = await codexFetch("/responses", {
+    method: "POST",
+    headers: { "OpenAI-Beta": "responses=experimental", Accept: "text/event-stream" },
+    body: JSON.stringify(body),
   });
-  return { client, id: threadStart.parse(result).thread.id };
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for await (const chunk of response.body!) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let end;
+    while ((end = buffer.indexOf("\n\n")) >= 0) {
+      const data = buffer
+        .slice(0, end)
+        .split("\n")
+        .find((line) => line.startsWith("data: "));
+      buffer = buffer.slice(end + 2);
+      if (data) {
+        yield streamEvent.parse(JSON.parse(data.slice(6)));
+      }
+    }
+  }
 }
 
-export function runTurn(
-  thread: Thread,
+type AgentOptions = {
+  instructions: string;
+  input: Item[];
+  model?: string;
+  effort?: string;
+  tools?: Tool[];
+  webSearch?: boolean;
+  schema?: unknown;
+  onEvent?: (event: StreamEvent) => void;
+};
+
+export async function runAgent(
   {
-    text,
-    images = [],
+    instructions,
+    input,
     model = MODEL,
     effort = REASONING_EFFORT,
+    tools = [],
+    webSearch = false,
     schema,
-    onNotification,
-  }: {
-    text: string;
-    images?: string[];
-    model?: string;
-    effort?: string;
-    schema?: unknown;
-    onNotification?: (notification: CodexNotification) => void;
+    onEvent,
+  }: AgentOptions,
+  items: Item[] = [],
+  usage: TurnUsage = {
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+    context: 0,
   },
-) {
-  return new Promise<{ text: string; usage: TurnUsage; items: RawItem[] }>(
-    (resolvePromise, reject) => {
-      let reply = "";
-      const items: RawItem[] = [];
-      const usage: TurnUsage = {
-        inputTokens: 0,
-        cachedInputTokens: 0,
-        outputTokens: 0,
-        reasoningOutputTokens: 0,
-        context: 0,
-      };
-      const listener = (notification: CodexNotification) => {
-        if (notification.params.threadId !== thread.id) {
-          return;
-        }
-        switch (notification.method) {
-          case "rawResponseItem/completed":
-            items.push(notification.params.item);
-            break;
-          case "thread/tokenUsage/updated": {
-            const { last } = notification.params.tokenUsage;
-            usage.inputTokens += last.inputTokens;
-            usage.cachedInputTokens += last.cachedInputTokens;
-            usage.outputTokens += last.outputTokens;
-            usage.reasoningOutputTokens += last.reasoningOutputTokens;
-            usage.context = last.inputTokens + last.outputTokens;
-            break;
-          }
-          case "item/completed":
-            if (notification.params.item.type === "agentMessage") {
-              reply = notification.params.item.text;
-            }
-            break;
-          case "turn/completed": {
-            thread.client.listeners.delete(listener);
-            const { turn } = notification.params;
-            if (turn.status === "completed") {
-              const start = items.findIndex(
-                (item) => item.role === "user" && item.content?.[0]?.text === text,
-              );
-              resolvePromise({
-                text: reply,
-                usage,
-                items: items.slice(Math.max(start, 0)),
-              });
-            } else {
-              reject(new Error(turn.error?.message ?? `Codex turn ${turn.status}`));
-            }
-            break;
-          }
-          default:
-            break;
-        }
-        onNotification?.(notification);
-      };
-      thread.client.listeners.add(listener);
-      thread.client
-        .request("turn/start", {
-          threadId: thread.id,
-          input: [
-            { type: "text", text, text_elements: [] },
-            ...images.map((path) => ({ type: "localImage", path })),
-          ],
-          model,
-          effort,
-          outputSchema: schema,
-        })
-        .catch((error: unknown) => {
-          thread.client.listeners.delete(listener);
-          reject(error);
-        });
-    },
+): Promise<{ text: string; usage: TurnUsage; items: Item[] }> {
+  const output: Item[] = [];
+  for await (const event of respond({
+    model,
+    instructions,
+    input: [...input, ...items],
+    tools: [
+      ...(webSearch ? [{ type: "web_search" }] : []),
+      ...tools.map((tool) => tool.definition),
+    ],
+    tool_choice: "auto",
+    parallel_tool_calls: false,
+    reasoning: { effort, summary: "auto" },
+    include: ["reasoning.encrypted_content"],
+    text: schema
+      ? { format: { type: "json_schema", name: "output", strict: true, schema } }
+      : undefined,
+    prompt_cache_key: "memori",
+    store: false,
+    stream: true,
+  })) {
+    if (event.type === "response.output_item.done" && event.item) {
+      output.push(event.item);
+    }
+    const last = event.response?.usage;
+    if (event.type === "response.completed" && last) {
+      usage.inputTokens += last.input_tokens;
+      usage.cachedInputTokens += last.input_tokens_details?.cached_tokens ?? 0;
+      usage.outputTokens += last.output_tokens;
+      usage.reasoningOutputTokens += last.output_tokens_details?.reasoning_tokens ?? 0;
+      usage.context = last.input_tokens + last.output_tokens;
+    }
+    if (event.type === "response.failed" || event.type === "error") {
+      throw new Error(
+        event.response?.error?.message ?? event.message ?? "Codex response failed",
+      );
+    }
+    onEvent?.(event);
+  }
+  items.push(...output);
+  const calls = output.filter((entry) => entry.type === "function_call");
+  if (calls.length === 0) {
+    const reply = output.findLast((entry) => entry.type === "message");
+    const text = (reply?.content ?? []).map((part) => part.text ?? "").join("");
+    return { text, usage, items };
+  }
+  items.push(
+    ...(await Promise.all(
+      calls.map(async (call) => {
+        const tool = tools.find((entry) => entry.definition.name === call.name);
+        return {
+          type: "function_call_output",
+          call_id: call.call_id,
+          output: tool
+            ? await tool.run(call.arguments ?? "", call.call_id ?? "")
+            : `Unknown tool "${call.name}"`,
+        };
+      }),
+    )),
+  );
+  return runAgent(
+    { instructions, input, model, effort, tools, webSearch, schema, onEvent },
+    items,
+    usage,
   );
 }
 
-export async function runOnce(instructions: string, prompt: string, schema?: unknown) {
-  const thread = await startThread(instructions, false);
-  try {
-    return await runTurn(thread, { text: prompt, schema });
-  } finally {
-    void thread.client
-      .request("thread/unsubscribe", { threadId: thread.id })
-      .catch(() => {});
-  }
+export function runOnce(instructions: string, prompt: string, schema?: unknown) {
+  return runAgent({
+    instructions,
+    input: [
+      { type: "message", role: "user", content: [{ type: "input_text", text: prompt }] },
+    ],
+    schema,
+  });
 }
