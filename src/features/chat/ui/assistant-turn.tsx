@@ -1,6 +1,7 @@
 import {
   IconBrain,
   IconCheck,
+  IconChevronRight,
   IconCopy,
   IconTerminal2,
   IconWorldSearch,
@@ -13,6 +14,11 @@ import { messageText, type MemoriUIMessage } from "@/shared/lib/memori";
 import { cn } from "@/shared/lib/utils";
 import { Bubble, BubbleContent } from "@/shared/ui/bubble";
 import { Button } from "@/shared/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shared/ui/collapsible";
 import { Marker, MarkerContent, MarkerIcon } from "@/shared/ui/marker";
 import { Spinner } from "@/shared/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
@@ -49,6 +55,43 @@ function Step({
   );
 }
 
+function ToolStep({
+  icon,
+  running,
+  children,
+  details,
+}: {
+  icon: ReactNode;
+  running: boolean;
+  children: ReactNode;
+  details: { label: string; text: string }[];
+}) {
+  return (
+    <Collapsible>
+      <CollapsibleTrigger
+        render={<Marker render={<button type="button" />} />}
+        className="cursor-pointer hover:text-foreground"
+      >
+        <MarkerIcon>{running ? <Spinner /> : icon}</MarkerIcon>
+        <MarkerContent className={cn("truncate", running && "shimmer")}>
+          {children}
+        </MarkerContent>
+        <IconChevronRight className="opacity-0 transition group-hover/marker:opacity-100 group-data-[panel-open]/marker:rotate-90 group-data-[panel-open]/marker:opacity-100" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 overflow-hidden rounded-lg border bg-muted/40 text-xs">
+        {details.map(({ label, text }) => (
+          <div key={label} className="border-b px-3 py-2 last:border-b-0">
+            <div className="mb-1 text-muted-foreground">{label}</div>
+            <pre className="max-h-80 overflow-auto font-mono break-words whitespace-pre-wrap">
+              {text}
+            </pre>
+          </div>
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 function TimelinePart({ part }: { part: Part }) {
   switch (part.type) {
     case "text":
@@ -67,15 +110,33 @@ function TimelinePart({ part }: { part: Part }) {
       );
     case "data-command":
       return (
-        <Step icon={<IconTerminal2 />} running={part.data.running}>
-          {part.data.running ? "Running" : "Ran"} {part.data.command}
-        </Step>
+        <ToolStep
+          icon={<IconTerminal2 />}
+          running={part.data.running}
+          details={[
+            { label: "Command", text: part.data.command },
+            ...(part.data.running
+              ? []
+              : [
+                  {
+                    label: `Output (exit code ${part.data.exitCode})`,
+                    text: part.data.output || "No output",
+                  },
+                ]),
+          ]}
+        >
+          {part.data.running ? "Running a command" : "Ran a command"}
+        </ToolStep>
       );
     case "data-search":
       return (
-        <Step icon={<IconWorldSearch />} running={part.data.running}>
-          {part.data.running ? "Searching the web" : `Searched ${part.data.query}`}
-        </Step>
+        <ToolStep
+          icon={<IconWorldSearch />}
+          running={part.data.running}
+          details={[{ label: "Query", text: part.data.query }]}
+        >
+          {part.data.running ? "Searching the web" : "Searched the web"}
+        </ToolStep>
       );
     default:
       return null;
