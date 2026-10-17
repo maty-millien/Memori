@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev",
-    "build": "vp build",
-    "preview": "vp preview",
-    "check": "vp check --fix",
+    "dev": "bun --bun vp dev",
+    "build": "bun --bun vp build",
+    "preview": "bun --bun vp preview",
+    "check": "bun --bun vp check --fix",
     "ci": "bun run --parallel check build"
   },
   "dependencies": {

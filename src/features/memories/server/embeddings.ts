@@ -1,13 +1,8 @@
-import { existsSync } from "node:fs";
-
 import { z } from "zod";
 
 import { SETTINGS } from "./config";
 
 function openrouterApiKey() {
-  if (existsSync(".env")) {
-    process.loadEnvFile(".env");
-  }
   const value = process.env.OPENROUTER_API_KEY;
   if (!value) {
     throw new Error("OPENROUTER_API_KEY must be set");
