@@ -1,17 +1,24 @@
-import { IconAlertCircle, IconScanTraces } from "@tabler/icons-react";
+import { IconAlertCircle, IconChevronRight, IconScanTraces } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
 import { formatDate, formatNumber, formatSeconds } from "@/shared/lib/format";
 import {
   effortLabel,
   type CallUsage,
+  type Memory,
   type MemoryOperation,
   type MemoriUIMessage,
+  type RetrievedMemory,
 } from "@/shared/lib/memori";
 import { cn } from "@/shared/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shared/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -30,17 +37,24 @@ import {
 } from "@/shared/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
-import { RetrievalTables } from "./retrieval-tables";
-
 type Part = MemoriUIMessage["parts"][number];
 type DataPart<T extends Part["type"]> = Extract<Part, { type: T; data: unknown }>["data"];
+
+const SCORE_COLUMNS = [
+  ["semantic", "Semantic"],
+  ["importance", "Importance"],
+  ["recency", "Recency"],
+  ["usage", "Usage"],
+  ["scope", "Scope"],
+  ["total", "Total"],
+] as const;
 
 function collect(parts: Part[]) {
   const trace = {
     retrieval: undefined as DataPart<"data-retrieval"> | undefined,
     prompt: undefined as string | undefined,
     curation: undefined as DataPart<"data-curation"> | undefined,
-    chatReasoning: [] as string[],
+    reasoning: [] as string[],
     compaction: undefined as DataPart<"data-compaction"> | undefined,
     errors: [] as string[],
     usage: undefined as DataPart<"data-usage"> | undefined,
@@ -58,7 +72,7 @@ function collect(parts: Part[]) {
         break;
       case "reasoning":
         if (part.text) {
-          trace.chatReasoning.push(part.text);
+          trace.reasoning.push(part.text);
         }
         break;
       case "data-compaction":
@@ -77,60 +91,124 @@ function collect(parts: Part[]) {
   return trace;
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function callSummary(call: CallUsage) {
+  return [
+    `${formatNumber(call.inputTokens)} in (${formatNumber(call.cachedTokens)} cached)`,
+    `${formatNumber(call.outputTokens)} out (${formatNumber(call.reasoningTokens)} reasoning)`,
+    formatSeconds(call.ms),
+  ].join(" · ");
+}
+
+function Section({
+  title,
+  summary,
+  children,
+}: {
+  title: string;
+  summary?: string;
+  children: ReactNode;
+}) {
   return (
-    <section className="flex min-w-0 flex-col gap-2">
-      <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {title}
+    <section className="flex min-w-0 flex-col gap-3 border-t pt-4">
+      <h3 className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="font-medium">{title}</span>
+        {summary ? (
+          <span className="text-xs text-muted-foreground">{summary}</span>
+        ) : null}
       </h3>
       {children}
     </section>
   );
 }
 
-function Pre({ children }: { children: string }) {
+function TextBlock({ label, text }: { label: string; text: string }) {
   return (
-    <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs whitespace-pre-wrap">
-      {children}
-    </pre>
+    <Collapsible>
+      <CollapsibleTrigger className="group flex cursor-pointer items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <IconChevronRight className="size-4 transition group-data-[panel-open]:rotate-90" />
+        {label}
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <pre className="mt-2 max-h-96 overflow-auto rounded-lg bg-muted p-3 text-xs whitespace-pre-wrap">
+          {text}
+        </pre>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
-function UsageTable({ usage }: { usage: DataPart<"data-usage"> }) {
-  const calls: [string, CallUsage | null][] = [
-    [`Chat (${usage.chatModel} ${effortLabel(usage.chatEffort)})`, usage.chat],
-    ["Curation", usage.curation],
+function Category({ importance, scope }: Pick<Memory, "importance" | "scope">) {
+  return (
+    <div className="flex gap-1">
+      <Badge variant="secondary">{importance}</Badge>
+      <Badge variant="outline">{scope}</Badge>
+    </div>
+  );
+}
+
+function MemoryTable({ memories }: { memories: RetrievedMemory[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Memory</TableHead>
+          <TableHead>Category</TableHead>
+          {SCORE_COLUMNS.map(([key, label]) => (
+            <TableHead key={key} className="text-right">
+              {label}
+            </TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {memories.map(({ memory, score }) => (
+          <TableRow key={memory.id}>
+            <TableCell className="min-w-64 whitespace-normal">{memory.content}</TableCell>
+            <TableCell>
+              <Category importance={memory.importance} scope={memory.scope} />
+            </TableCell>
+            {SCORE_COLUMNS.map(([key]) => (
+              <TableCell
+                key={key}
+                className={cn(
+                  "text-right tabular-nums",
+                  key === "total" ? "font-medium" : "text-muted-foreground",
+                )}
+              >
+                {score[key].toFixed(2)}
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function ConversationTable({ recent, similar }: { recent: Memory[]; similar: Memory[] }) {
+  const conversations = [
+    ...recent.map((memory) => ({ source: "Recent", memory })),
+    ...similar.map((memory) => ({ source: "Similar", memory })),
   ];
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Step</TableHead>
-          <TableHead>Input</TableHead>
-          <TableHead>Cached</TableHead>
-          <TableHead>Output</TableHead>
-          <TableHead>Reasoning</TableHead>
-          <TableHead>Time</TableHead>
+          <TableHead>Conversation</TableHead>
+          <TableHead>Source</TableHead>
+          <TableHead>Date</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        <TableRow>
-          <TableCell>Retrieval</TableCell>
-          <TableCell colSpan={4} />
-          <TableCell>{formatSeconds(usage.retrievalMs)}</TableCell>
-        </TableRow>
-        {calls.map(([label, call]) =>
-          call ? (
-            <TableRow key={label}>
-              <TableCell>{label}</TableCell>
-              <TableCell>{formatNumber(call.inputTokens)}</TableCell>
-              <TableCell>{formatNumber(call.cachedTokens)}</TableCell>
-              <TableCell>{formatNumber(call.outputTokens)}</TableCell>
-              <TableCell>{formatNumber(call.reasoningTokens)}</TableCell>
-              <TableCell>{formatSeconds(call.ms)}</TableCell>
-            </TableRow>
-          ) : null,
-        )}
+        {conversations.map(({ source, memory }) => (
+          <TableRow key={`${source}-${memory.id}`}>
+            <TableCell className="min-w-64 whitespace-normal">{memory.content}</TableCell>
+            <TableCell>
+              <Badge variant="outline">{source}</Badge>
+            </TableCell>
+            <TableCell>{formatDate(memory.createdAt)}</TableCell>
+          </TableRow>
+        ))}
       </TableBody>
     </Table>
   );
@@ -150,8 +228,6 @@ function OperationTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Action</TableHead>
-          <TableHead>ID</TableHead>
           <TableHead>Before</TableHead>
           <TableHead>After</TableHead>
           <TableHead>Category</TableHead>
@@ -163,8 +239,6 @@ function OperationTable({
           <TableRow
             key={`${operation.action}-${operation.memory_id}-${operation.content}`}
           >
-            <TableCell>{operation.action}</TableCell>
-            <TableCell>{operation.memory_id ?? "new"}</TableCell>
             <TableCell className="min-w-48 whitespace-normal text-muted-foreground">
               {operation.memory_id ? before.get(operation.memory_id) : null}
             </TableCell>
@@ -172,11 +246,8 @@ function OperationTable({
               {operation.content}
             </TableCell>
             <TableCell>
-              {operation.action === "upsert" ? (
-                <div className="flex gap-1">
-                  <Badge variant="secondary">{operation.importance}</Badge>
-                  <Badge variant="outline">{operation.scope}</Badge>
-                </div>
+              {operation.importance && operation.scope ? (
+                <Category importance={operation.importance} scope={operation.scope} />
               ) : null}
             </TableCell>
             <TableCell className="whitespace-normal">{operation.result}</TableCell>
@@ -188,8 +259,10 @@ function OperationTable({
 }
 
 export function DebugDialog({ message }: { message: MemoriUIMessage }) {
-  const trace = collect(message.parts);
-  const failed = trace.errors.length > 0;
+  const { retrieval, prompt, curation, reasoning, compaction, errors, usage } = collect(
+    message.parts,
+  );
+  const failed = errors.length > 0;
 
   return (
     <Dialog>
@@ -217,70 +290,75 @@ export function DebugDialog({ message }: { message: MemoriUIMessage }) {
       </Tooltip>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
-          <DialogTitle>Turn debug</DialogTitle>
-          <DialogDescription>
-            {message.id}
-            {message.metadata?.createdAt
-              ? ` · ${formatDate(message.metadata.createdAt)}`
-              : null}
-          </DialogDescription>
+          <DialogTitle>Turn details</DialogTitle>
+          {message.metadata?.createdAt ? (
+            <DialogDescription>
+              {formatDate(message.metadata.createdAt)}
+            </DialogDescription>
+          ) : null}
         </DialogHeader>
-        {trace.errors.map((error) => (
+        {errors.map((error) => (
           <Alert key={error} variant="destructive">
             <IconAlertCircle />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ))}
-        {trace.usage ? (
-          <Section title="Usage">
-            <UsageTable usage={trace.usage} />
-          </Section>
-        ) : null}
-        {trace.retrieval ? (
+        {retrieval ? (
           <Section
-            title={`Retrieval: ${trace.retrieval.memories.length} memories, ${trace.retrieval.recent.length} recent and ${trace.retrieval.similar.length} similar conversations`}
+            title="Retrieval"
+            summary={[
+              `${retrieval.memories.length} memories`,
+              `${retrieval.recent.length + retrieval.similar.length} conversations`,
+              usage ? formatSeconds(usage.retrievalMs) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           >
-            <RetrievalTables data={trace.retrieval} />
+            {retrieval.memories.length > 0 ? (
+              <MemoryTable memories={retrieval.memories} />
+            ) : null}
+            {retrieval.recent.length + retrieval.similar.length > 0 ? (
+              <ConversationTable recent={retrieval.recent} similar={retrieval.similar} />
+            ) : null}
           </Section>
         ) : null}
-        {trace.prompt ? (
-          <Section title="Chat prompt">
-            <Pre>{trace.prompt}</Pre>
+        {prompt || reasoning.length > 0 ? (
+          <Section
+            title="Chat"
+            summary={
+              usage
+                ? `${usage.chatModel} ${effortLabel(usage.chatEffort)} · ${callSummary(usage.chat)}`
+                : undefined
+            }
+          >
+            {prompt ? <TextBlock label="Prompt" text={prompt} /> : null}
+            {reasoning.length > 0 ? (
+              <TextBlock label="Reasoning" text={reasoning.join("\n\n")} />
+            ) : null}
           </Section>
         ) : null}
-        {trace.chatReasoning.length > 0 ? (
-          <Section title="Chat reasoning">
-            <Pre>{trace.chatReasoning.join("\n\n")}</Pre>
-          </Section>
-        ) : null}
-        {trace.curation ? (
-          <Section title="Curation input">
-            <Pre>{trace.curation.prompt}</Pre>
-          </Section>
-        ) : null}
-        {trace.curation ? (
-          <Section title="Memory changes">
-            {trace.curation.operations.length > 0 ? (
-              <OperationTable
-                operations={trace.curation.operations}
-                retrieval={trace.retrieval}
-              />
+        {curation ? (
+          <Section
+            title="Curation"
+            summary={usage?.curation ? callSummary(usage.curation) : undefined}
+          >
+            {curation.operations.length > 0 ? (
+              <OperationTable operations={curation.operations} retrieval={retrieval} />
             ) : (
-              <p className="text-muted-foreground">No memory changes</p>
+              <p className="text-sm text-muted-foreground">No memory changes</p>
             )}
+            <TextBlock label="Prompt" text={curation.prompt} />
           </Section>
         ) : null}
-        {trace.compaction ? (
+        {compaction ? (
           <Section
-            title={`Episode #${trace.compaction.episodeId}, ${trace.compaction.messageCount} messages summarized`}
+            title="Episode"
+            summary={`${compaction.messageCount} messages summarized`}
           >
-            <p>{trace.compaction.summary}</p>
+            <p className="text-sm">{compaction.summary}</p>
           </Section>
         ) : null}
-        <Section title="Raw parts">
-          <Pre>{JSON.stringify(message.parts, null, 2)}</Pre>
-        </Section>
       </DialogContent>
     </Dialog>
   );

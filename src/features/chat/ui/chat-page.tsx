@@ -150,7 +150,7 @@ export function ChatPage({
       <MessageScrollerProvider autoScroll>
         <MessageScroller className="flex-1">
           <MessageScrollerViewport className="[--scroll-fade-t-size:--spacing(16)]">
-            <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-10 px-6 pt-18 pb-10">
+            <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-10 px-6 pt-18 pb-24">
               {messages.map((message) => (
                 <MessageScrollerItem
                   key={message.id}
