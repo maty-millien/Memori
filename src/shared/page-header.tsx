@@ -100,7 +100,7 @@ export function PageHeader({ className }: { className?: string }) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
           {LINKS.map(({ to, label, icon: Icon }) => (
-            <DropdownMenuItem key={to} onClick={() => void router.navigate({ to })}>
+            <DropdownMenuItem key={to} render={<Link to={to} />}>
               <Icon />
               {label}
             </DropdownMenuItem>

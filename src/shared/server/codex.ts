@@ -152,9 +152,11 @@ const modelList = z.object({
   ),
 });
 
-export async function chatOptions() {
+let cachedModels: ChatModel[] | undefined;
+
+async function fetchModels() {
   const response = await codexFetch(`/models?client_version=${CLIENT_VERSION}`);
-  const models: ChatModel[] = modelList
+  return modelList
     .parse(await response.json())
     .models.filter((model) => model.visibility === "list")
     .toSorted((a, b) => a.priority - b.priority)
@@ -165,6 +167,11 @@ export async function chatOptions() {
       defaultEffort: model.default_reasoning_level,
       images: model.input_modalities.includes("image"),
     }));
+}
+
+export async function chatOptions() {
+  cachedModels ??= await fetchModels();
+  const models = cachedModels;
   const stored = getChatSettings();
   const model = models.find((entry) => entry.id === stored.model) ?? models[0];
   const settings: ChatSettings = {
