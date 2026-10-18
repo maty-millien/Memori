@@ -21,6 +21,7 @@ import { retrieve } from "@/features/memories/server/retrieval";
 import {
   CONTEXT_WINDOW,
   type CallUsage,
+  type Episode,
   type Memory,
   type MemoriUIMessage,
   type Question,
@@ -115,6 +116,8 @@ const errorMessage = (error: unknown) =>
 
 const memoryKey = (memory: Memory) => `${memory.id}@${memory.updatedAt}`;
 
+const episodeKey = (episode: Episode) => `episode:${episode.id}`;
+
 const FULL_TOOL_OUTPUT_TURNS = 3;
 
 function seedItems(history: MemoriUIMessage[]) {
@@ -191,22 +194,24 @@ export function chatResponse(messageId: string, userText: string) {
           message.parts.flatMap((part) =>
             part.type === "data-retrieval"
               ? [
-                  ...part.data.memories.map((item) => item.memory),
-                  ...part.data.recent,
-                  ...part.data.similar,
-                ].map(memoryKey)
+                  ...part.data.memories.map((item) => memoryKey(item.memory)),
+                  ...[...part.data.recent, ...part.data.similar].map(episodeKey),
+                ]
               : [],
           ),
         ),
       );
-      const unseen = (memories: Memory[]) =>
-        memories.filter((memory) => !seen.has(memoryKey(memory)));
+      const unseen = <T>(entries: T[], key: (entry: T) => string) =>
+        entries.filter((entry) => !seen.has(key(entry)));
       const current = timestampedUserContent(body, createdAt);
       const prompt = buildContextPrompt(
         current,
-        unseen(retrieval.memories.map((item) => item.memory)),
-        unseen(retrieval.recent),
-        unseen(retrieval.similar),
+        unseen(
+          retrieval.memories.map((item) => item.memory),
+          memoryKey,
+        ),
+        unseen(retrieval.recent, episodeKey),
+        unseen(retrieval.similar, episodeKey),
       );
       writer.write({ type: "data-retrieval", data: retrieval });
       writer.write({ type: "data-prompt", data: { prompt } });

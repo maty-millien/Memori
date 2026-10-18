@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { resetEverything, triggerEpisode } from "@/features/memories/server/functions";
 import { MemoriesDialog } from "@/features/memories/ui/memories-dialog";
-import type { Memory } from "@/shared/lib/memori";
+import type { Episode, Memory } from "@/shared/lib/memori";
 import { cn } from "@/shared/lib/utils";
 import {
   AlertDialog,
@@ -44,7 +44,7 @@ export function PageHeader({
 }: {
   className?: string;
   memories: Memory[];
-  conversations: Memory[];
+  conversations: Episode[];
 }) {
   const router = useRouter();
   const [summarizing, setSummarizing] = useState(false);

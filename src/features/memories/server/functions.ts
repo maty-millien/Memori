@@ -1,12 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
 
-import { listLiveMessages, listMemories, resetDatabase } from "@/shared/server/db";
+import {
+  listEpisodes,
+  listLiveMessages,
+  listMemories,
+  resetDatabase,
+} from "@/shared/server/db";
 
 import { createEpisode } from "./episodes";
 
 export const getMemories = createServerFn().handler(() => ({
-  memories: listMemories("memory"),
-  conversations: listMemories("conversation"),
+  memories: listMemories(),
+  conversations: listEpisodes(),
 }));
 
 export const resetEverything = createServerFn({ method: "POST" }).handler(() =>

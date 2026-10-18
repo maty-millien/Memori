@@ -5,6 +5,7 @@ import { formatDate, formatNumber, formatSeconds } from "@/shared/lib/format";
 import {
   effortLabel,
   type CallUsage,
+  type Episode,
   type Memory,
   type MemoryOperation,
   type MemoriUIMessage,
@@ -185,10 +186,16 @@ function MemoryTable({ memories }: { memories: RetrievedMemory[] }) {
   );
 }
 
-function ConversationTable({ recent, similar }: { recent: Memory[]; similar: Memory[] }) {
+function ConversationTable({
+  recent,
+  similar,
+}: {
+  recent: Episode[];
+  similar: Episode[];
+}) {
   const conversations = [
-    ...recent.map((memory) => ({ source: "Recent", memory })),
-    ...similar.map((memory) => ({ source: "Similar", memory })),
+    ...recent.map((episode) => ({ source: "Recent", episode })),
+    ...similar.map((episode) => ({ source: "Similar", episode })),
   ];
   return (
     <Table>
@@ -200,13 +207,15 @@ function ConversationTable({ recent, similar }: { recent: Memory[]; similar: Mem
         </TableRow>
       </TableHeader>
       <TableBody>
-        {conversations.map(({ source, memory }) => (
-          <TableRow key={`${source}-${memory.id}`}>
-            <TableCell className="min-w-64 whitespace-normal">{memory.content}</TableCell>
+        {conversations.map(({ source, episode }) => (
+          <TableRow key={`${source}-${episode.id}`}>
+            <TableCell className="min-w-64 whitespace-normal">
+              {episode.content}
+            </TableCell>
             <TableCell>
               <Badge variant="outline">{source}</Badge>
             </TableCell>
-            <TableCell>{formatDate(memory.createdAt)}</TableCell>
+            <TableCell>{formatDate(episode.createdAt)}</TableCell>
           </TableRow>
         ))}
       </TableBody>

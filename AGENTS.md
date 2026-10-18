@@ -6,7 +6,7 @@ Memori is a local research app for long-term agent memory. There is a single end
 
 ## Project rules
 
-- Never start a development server unless the user asks for it.
+- You can start a dev server but always stop it at the end of your turn, and also use a different port to avoid conflicts.
 - Run `bun run ci` after every edit.
 - Do not write comments in the code.
 

@@ -2,7 +2,7 @@ import { IconBrain, IconMessages } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
 import { formatDate } from "@/shared/lib/format";
-import type { Memory } from "@/shared/lib/memori";
+import type { Episode, Memory } from "@/shared/lib/memori";
 import { Badge } from "@/shared/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import {
@@ -59,19 +59,44 @@ function MemoryTable({ memories }: { memories: Memory[] }) {
   );
 }
 
-function MemoryList({
-  memories,
+function EpisodeTable({ episodes }: { episodes: Episode[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>ID</TableHead>
+          <TableHead>Content</TableHead>
+          <TableHead>Created</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {episodes.map((episode) => (
+          <TableRow key={episode.id}>
+            <TableCell>{episode.id}</TableCell>
+            <TableCell className="min-w-80 whitespace-pre-line">
+              {episode.content}
+            </TableCell>
+            <TableCell>{formatDate(episode.createdAt)}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function List({
+  children,
   icon,
   title,
   description,
 }: {
-  memories: Memory[];
+  children: ReactNode;
   icon: ReactNode;
   title: string;
   description: string;
 }) {
-  if (memories.length > 0) {
-    return <MemoryTable memories={memories} />;
+  if (children) {
+    return children;
   }
   return (
     <Empty>
@@ -93,7 +118,7 @@ export function MemoriesDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   memories: Memory[];
-  conversations: Memory[];
+  conversations: Episode[];
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -109,20 +134,22 @@ export function MemoriesDialog({
             </TabsTrigger>
           </TabsList>
           <TabsContent value="memories" className="min-h-0 overflow-y-auto">
-            <MemoryList
-              memories={memories}
+            <List
               icon={<IconBrain />}
               title="No memories"
               description="Memories appear here once curation saves something durable."
-            />
+            >
+              {memories.length > 0 && <MemoryTable memories={memories} />}
+            </List>
           </TabsContent>
           <TabsContent value="conversations" className="min-h-0 overflow-y-auto">
-            <MemoryList
-              memories={conversations}
+            <List
               icon={<IconMessages />}
               title="No episodes"
               description="Episodes appear when the chat passes 100k tokens of context."
-            />
+            >
+              {conversations.length > 0 && <EpisodeTable episodes={conversations} />}
+            </List>
           </TabsContent>
         </Tabs>
       </DialogContent>

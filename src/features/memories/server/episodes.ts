@@ -1,6 +1,6 @@
 import type { MemoriUIMessage } from "@/shared/lib/memori";
 import { runOnce } from "@/shared/server/codex";
-import { assignEpisode, getThreadItems, insertMemory } from "@/shared/server/db";
+import { assignEpisode, getThreadItems, insertEpisode } from "@/shared/server/db";
 
 import { embedOne } from "./embeddings";
 import { transcript } from "./prompting";
@@ -36,15 +36,7 @@ export async function createEpisode(history: MemoriUIMessage[]) {
   if (!summary) {
     return null;
   }
-  const episodeId = insertMemory(
-    {
-      content: summary,
-      scope: "topical",
-      kind: "conversation",
-      importance: "useful_fact",
-    },
-    await embedOne(summary, "document"),
-  );
+  const episodeId = insertEpisode(summary, await embedOne(summary, "document"));
   assignEpisode(
     messages.map((message) => message.id),
     episodeId,

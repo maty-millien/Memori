@@ -1,5 +1,5 @@
 import type { Memory, RetrievedMemory } from "@/shared/lib/memori";
-import { listMemoryVectors, markAccessed } from "@/shared/server/db";
+import { listEpisodeVectors, listMemoryVectors, markAccessed } from "@/shared/server/db";
 
 import { SETTINGS } from "./config";
 
@@ -19,9 +19,13 @@ function cosine(a: Float32Array, b: Float32Array) {
   return normA && normB ? dot / Math.sqrt(normA * normB) : 0;
 }
 
-function nearest(vectors: Vector[], query: Float32Array, count: number) {
+function nearest<T extends { embedding: Float32Array }>(
+  vectors: T[],
+  query: Float32Array,
+  count: number,
+) {
   return vectors
-    .map(({ memory, embedding }) => ({ memory, similarity: cosine(query, embedding) }))
+    .map((vector) => ({ vector, similarity: cosine(query, vector.embedding) }))
     .toSorted((a, b) => b.similarity - a.similarity)
     .slice(0, count);
 }
@@ -47,16 +51,15 @@ function rank(memory: Memory, similarity: number): RetrievedMemory {
 }
 
 export function retrieve(query: Float32Array, liveSince: string | undefined) {
-  const all = listMemoryVectors("memory");
+  const all = listMemoryVectors();
   const isLive = ({ memory }: Vector) =>
     liveSince !== undefined && memory.updatedAt >= liveSince;
   const memories = all.filter((vector) => !isLive(vector));
   const live = all.filter(isLive).map(({ memory }) => memory);
   const candidates = new Map(
-    nearest(memories, query, SETTINGS.retrievalPoolK).map(({ memory, similarity }) => [
-      memory.id,
-      { memory, similarity },
-    ]),
+    nearest(memories, query, SETTINGS.retrievalPoolK).map(
+      ({ vector: { memory }, similarity }) => [memory.id, { memory, similarity }],
+    ),
   );
   for (const { memory } of memories) {
     if (memory.scope === "global" && !candidates.has(memory.id)) {
@@ -69,17 +72,17 @@ export function retrieve(query: Float32Array, liveSince: string | undefined) {
     .slice(0, SETTINGS.retrievalTopK);
   markAccessed(retrieved.map((item) => item.memory.id));
 
-  const conversations = listMemoryVectors("conversation");
-  const recent = conversations
-    .map(({ memory }) => memory)
+  const episodes = listEpisodeVectors();
+  const recent = episodes
+    .map(({ episode }) => episode)
     .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, SETTINGS.recentConversations);
-  const recentIds = new Set(recent.map((memory) => memory.id));
+  const recentIds = new Set(recent.map((episode) => episode.id));
   const similar = nearest(
-    conversations.filter(({ memory }) => !recentIds.has(memory.id)),
+    episodes.filter(({ episode }) => !recentIds.has(episode.id)),
     query,
     SETTINGS.similarConversations,
-  ).map(({ memory }) => memory);
+  ).map(({ vector }) => vector.episode);
 
   return { memories: retrieved, recent, similar, live };
 }

@@ -5,11 +5,10 @@ import { z } from "zod";
 
 import {
   IMPORTANCES,
-  KINDS,
   SCOPES,
   type ChatSettings,
+  type Episode,
   type Importance,
-  type Kind,
   type Memory,
   type MemoriUIMessage,
 } from "@/shared/lib/memori";
@@ -24,12 +23,17 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     content TEXT NOT NULL,
     scope TEXT NOT NULL,
-    kind TEXT NOT NULL,
     importance TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     last_accessed_at TEXT,
     access_count INTEGER NOT NULL DEFAULT 0,
+    embedding BLOB NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS episodes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
     embedding BLOB NOT NULL
   );
   CREATE TABLE IF NOT EXISTS messages (
@@ -54,7 +58,6 @@ const memoryRow = z
     id: z.number(),
     content: z.string(),
     scope: z.enum(SCOPES),
-    kind: z.enum(KINDS),
     importance: z.enum(IMPORTANCES),
     created_at: z.string(),
     updated_at: z.string(),
@@ -65,12 +68,19 @@ const memoryRow = z
     id: String(row.id),
     content: row.content,
     scope: row.scope,
-    kind: row.kind,
     importance: row.importance,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastAccessedAt: row.last_accessed_at,
     accessCount: row.access_count,
+  }));
+
+const episodeRow = z
+  .object({ id: z.number(), content: z.string(), created_at: z.string() })
+  .transform((row): Episode => ({
+    id: String(row.id),
+    content: row.content,
+    createdAt: row.created_at,
   }));
 
 const vectorRow = z.object({ embedding: z.instanceof(Uint8Array) });
@@ -85,7 +95,7 @@ const messageRow = z.object({
 });
 
 const MEMORY_COLUMNS =
-  "id, content, scope, kind, importance, created_at, updated_at, last_accessed_at, access_count";
+  "id, content, scope, importance, created_at, updated_at, last_accessed_at, access_count";
 
 function toBlob(embedding: Float32Array) {
   return new Uint8Array(embedding.buffer, embedding.byteOffset, embedding.byteLength);
@@ -95,21 +105,45 @@ function fromBlob(blob: Uint8Array) {
   return new Float32Array(blob.slice().buffer);
 }
 
-export function listMemories(kind: Kind) {
+export function listMemories() {
   return db
-    .prepare(`SELECT ${MEMORY_COLUMNS} FROM memories WHERE kind = ? ORDER BY id`)
-    .all(kind)
+    .prepare(`SELECT ${MEMORY_COLUMNS} FROM memories ORDER BY id`)
+    .all()
     .map((row) => memoryRow.parse(row));
 }
 
-export function listMemoryVectors(kind: Kind) {
+export function listMemoryVectors() {
   return db
-    .prepare(`SELECT ${MEMORY_COLUMNS}, embedding FROM memories WHERE kind = ?`)
-    .all(kind)
+    .prepare(`SELECT ${MEMORY_COLUMNS}, embedding FROM memories`)
+    .all()
     .map((row) => ({
       memory: memoryRow.parse(row),
       embedding: fromBlob(vectorRow.parse(row).embedding),
     }));
+}
+
+export function listEpisodes() {
+  return db
+    .prepare("SELECT id, content, created_at FROM episodes ORDER BY id")
+    .all()
+    .map((row) => episodeRow.parse(row));
+}
+
+export function listEpisodeVectors() {
+  return db
+    .prepare("SELECT id, content, created_at, embedding FROM episodes")
+    .all()
+    .map((row) => ({
+      episode: episodeRow.parse(row),
+      embedding: fromBlob(vectorRow.parse(row).embedding),
+    }));
+}
+
+export function insertEpisode(content: string, embedding: Float32Array) {
+  const result = db
+    .prepare("INSERT INTO episodes (content, created_at, embedding) VALUES (?, ?, ?)")
+    .run(content, new Date().toISOString(), toBlob(embedding));
+  return String(result.lastInsertRowid);
 }
 
 export function getMemory(id: string) {
@@ -118,24 +152,16 @@ export function getMemory(id: string) {
 }
 
 export function insertMemory(
-  memory: Pick<Memory, "content" | "scope" | "kind" | "importance">,
+  memory: Pick<Memory, "content" | "scope" | "importance">,
   embedding: Float32Array,
 ) {
   const now = new Date().toISOString();
   const result = db
     .prepare(
-      `INSERT INTO memories (content, scope, kind, importance, created_at, updated_at, embedding)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO memories (content, scope, importance, created_at, updated_at, embedding)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(
-      memory.content,
-      memory.scope,
-      memory.kind,
-      memory.importance,
-      now,
-      now,
-      toBlob(embedding),
-    );
+    .run(memory.content, memory.scope, memory.importance, now, now, toBlob(embedding));
   return String(result.lastInsertRowid);
 }
 
@@ -166,7 +192,7 @@ export function markAccessed(ids: string[]) {
 
 export function resetDatabase() {
   db.exec(
-    "DELETE FROM memories; DELETE FROM messages; DELETE FROM settings; DELETE FROM thread_items; DELETE FROM sqlite_sequence;",
+    "DELETE FROM memories; DELETE FROM episodes; DELETE FROM messages; DELETE FROM settings; DELETE FROM thread_items; DELETE FROM sqlite_sequence;",
   );
 }
 

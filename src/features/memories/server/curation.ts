@@ -83,7 +83,6 @@ async function apply({ action, memory_id, content, scope, importance }: Operatio
     {
       content,
       scope: scope ?? "topical",
-      kind: "memory",
       importance: importance ?? "useful_fact",
     },
     await embedOne(content, "document"),

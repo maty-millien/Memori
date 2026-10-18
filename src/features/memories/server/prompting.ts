@@ -1,4 +1,9 @@
-import { messageText, type Memory, type MemoriUIMessage } from "@/shared/lib/memori";
+import {
+  messageText,
+  type Episode,
+  type Memory,
+  type MemoriUIMessage,
+} from "@/shared/lib/memori";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -32,11 +37,11 @@ export function formatMemories(memories: Memory[]) {
     .join("\n");
 }
 
-function formatConversations(memories: Memory[]) {
-  return memories
+function formatConversations(episodes: Episode[]) {
+  return episodes
     .map(
-      (memory) =>
-        `- [local_datetime: ${localIso(new Date(memory.createdAt))}; timezone: ${timezone()}] ${memory.content.replaceAll("\n", "\n  ")}`,
+      (episode) =>
+        `- [local_datetime: ${localIso(new Date(episode.createdAt))}; timezone: ${timezone()}] ${episode.content.replaceAll("\n", "\n  ")}`,
     )
     .join("\n");
 }
@@ -44,8 +49,8 @@ function formatConversations(memories: Memory[]) {
 export function buildContextPrompt(
   content: string,
   memories: Memory[],
-  recent: Memory[],
-  similar: Memory[],
+  recent: Episode[],
+  similar: Episode[],
 ) {
   const blocks = [];
   if (recent.length > 0) {

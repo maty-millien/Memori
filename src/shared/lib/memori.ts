@@ -2,7 +2,6 @@ import type { UIMessage } from "ai";
 
 export const SCOPES = ["global", "topical"] as const;
 export const CONTEXT_WINDOW = 100_000;
-export const KINDS = ["memory", "conversation"] as const;
 export const IMPORTANCES = [
   "identity",
   "global_preference",
@@ -12,7 +11,6 @@ export const IMPORTANCES = [
 ] as const;
 
 export type Scope = (typeof SCOPES)[number];
-export type Kind = (typeof KINDS)[number];
 export type Importance = (typeof IMPORTANCES)[number];
 export type ChatSettings = { model: string; effort: string };
 export type Question = {
@@ -47,13 +45,14 @@ export type Memory = {
   id: string;
   content: string;
   scope: Scope;
-  kind: Kind;
   importance: Importance;
   createdAt: string;
   updatedAt: string;
   lastAccessedAt: string | null;
   accessCount: number;
 };
+
+export type Episode = Pick<Memory, "id" | "content" | "createdAt">;
 
 export type Score = {
   similarity: number;
@@ -85,7 +84,7 @@ export type MemoryOperation = {
 };
 
 type MemoriData = {
-  retrieval: { memories: RetrievedMemory[]; recent: Memory[]; similar: Memory[] };
+  retrieval: { memories: RetrievedMemory[]; recent: Episode[]; similar: Episode[] };
   prompt: { prompt: string };
   thought: { ms: number };
   command: { command: string; running: boolean; exitCode: number | null; output: string };
