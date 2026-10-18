@@ -37,6 +37,7 @@ import {
   listLiveMessages,
   saveMessage,
   saveThreadItems,
+  updateMessageParts,
 } from "@/shared/server/db";
 
 import { CHAT_PROMPT, PATCH_DESCRIPTION, QUESTION_DESCRIPTION } from "./prompts";
@@ -58,6 +59,8 @@ let activeTurn: {
   controller: AbortController;
   steer: ((text: string) => void) | null;
 } | null = null;
+
+let postTurn = Promise.resolve();
 
 export const activeUserMessage = () => activeTurn?.userMessage;
 
@@ -112,16 +115,26 @@ const errorMessage = (error: unknown) =>
 
 const memoryKey = (memory: Memory) => `${memory.id}@${memory.updatedAt}`;
 
+const FULL_TOOL_OUTPUT_TURNS = 3;
+
 function seedItems(history: MemoriUIMessage[]) {
-  return history.flatMap((message) =>
-    message.role === "user"
-      ? []
-      : z.array(itemSchema).parse(getThreadItems(message.id) ?? []),
+  const replies = history.filter((message) => message.role !== "user");
+  return replies.flatMap((message, index) =>
+    z
+      .array(itemSchema)
+      .parse(getThreadItems(message.id) ?? [])
+      .map((item) =>
+        item.type === "function_call_output" &&
+        index < replies.length - FULL_TOOL_OUTPUT_TURNS
+          ? Object.assign(item, {
+              output: `[Output${typeof item.output === "string" ? ` (${item.output.split("\n").length} lines)` : ""} elided to save context. Rerun the tool if you need it again.]`,
+            })
+          : item,
+      ),
   );
 }
 
 export function chatResponse(messageId: string, userText: string) {
-  const history = listLiveMessages();
   const createdAt = new Date();
   const userMessage: MemoriUIMessage = {
     id: messageId,
@@ -130,6 +143,7 @@ export function chatResponse(messageId: string, userText: string) {
     metadata: { createdAt: createdAt.toISOString() },
   };
   let items: Item[] | null = null;
+  let finishTurn: ((message: MemoriUIMessage) => Promise<void>) | null = null;
   const turn: NonNullable<typeof activeTurn> = {
     userMessage,
     chunks: [],
@@ -141,10 +155,11 @@ export function chatResponse(messageId: string, userText: string) {
   const { signal } = turn.controller;
 
   const stream = createUIMessageStream<MemoriUIMessage>({
-    originalMessages: [...history, userMessage],
     onError: errorMessage,
     execute: async ({ writer }) => {
       writer.write({ type: "start" });
+      await postTurn;
+      const history = listLiveMessages();
       const inbox: string[] = [];
       const steers: string[] = [];
       turn.steer = (text) => {
@@ -553,35 +568,12 @@ export function chatResponse(messageId: string, userText: string) {
           ].join("\n"),
         ),
       ].join("\n\n");
-      let curationUsage: CallUsage | null = null;
-      try {
-        const curation = await curate(curationPrompt);
-        curationUsage = curation.usage;
-        writer.write({
-          type: "data-curation",
-          data: { prompt: curationPrompt, operations: curation.operations },
-        });
-      } catch (error) {
-        writer.write({ type: "data-error", data: { message: errorMessage(error) } });
-      }
-
-      if (reply.context > CONTEXT_WINDOW) {
-        try {
-          const episode = await createEpisode(history);
-          if (episode) {
-            writer.write({ type: "data-compaction", data: episode });
-          }
-        } catch (error) {
-          writer.write({ type: "data-error", data: { message: errorMessage(error) } });
-        }
-      }
-
       writer.write({
         type: "data-usage",
         data: {
           retrievalMs,
           chat: chatUsage,
-          curation: curationUsage,
+          curation: null,
           context: reply.context,
           chatModel: chatSettings.model,
           chatEffort: chatSettings.effort,
@@ -589,6 +581,40 @@ export function chatResponse(messageId: string, userText: string) {
       });
       writer.write({ type: "finish" });
       items = [userItem, ...reply.items];
+      finishTurn = async (message) => {
+        const parts: MemoriUIMessage["parts"] = [];
+        let curationUsage: CallUsage | null = null;
+        try {
+          const curation = await curate(curationPrompt);
+          curationUsage = curation.usage;
+          parts.push({
+            type: "data-curation",
+            data: { prompt: curationPrompt, operations: curation.operations },
+          });
+        } catch (error) {
+          parts.push({ type: "data-error", data: { message: errorMessage(error) } });
+        }
+
+        if (reply.context > CONTEXT_WINDOW) {
+          try {
+            const episode = await createEpisode(history);
+            if (episode) {
+              parts.push({ type: "data-compaction", data: episode });
+            }
+          } catch (error) {
+            parts.push({ type: "data-error", data: { message: errorMessage(error) } });
+          }
+        }
+
+        updateMessageParts(message.id, [
+          ...message.parts.map((part) =>
+            part.type === "data-usage"
+              ? { ...part, data: { ...part.data, curation: curationUsage } }
+              : part,
+          ),
+          ...parts,
+        ]);
+      };
     },
     onEnd: ({ responseMessage }) => {
       activeTurn = null;
@@ -596,11 +622,15 @@ export function chatResponse(messageId: string, userText: string) {
         return;
       }
       saveMessage(userMessage);
-      saveMessage({
+      const message = {
         ...responseMessage,
         metadata: { createdAt: new Date().toISOString() },
-      });
+      };
+      saveMessage(message);
       saveThreadItems(responseMessage.id, items);
+      if (finishTurn) {
+        postTurn = finishTurn(message).catch(() => {});
+      }
     },
   });
 

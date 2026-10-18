@@ -204,6 +204,10 @@ export function saveMessage(message: MemoriUIMessage) {
   );
 }
 
+export function updateMessageParts(id: string, parts: MemoriUIMessage["parts"]) {
+  db.prepare("UPDATE messages SET parts = ? WHERE id = ?").run(JSON.stringify(parts), id);
+}
+
 export function assignEpisode(messageIds: string[], episodeId: string) {
   const statement = db.prepare("UPDATE messages SET episode_id = ? WHERE id = ?");
   for (const id of messageIds) {

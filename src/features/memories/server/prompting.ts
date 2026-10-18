@@ -36,7 +36,7 @@ function formatConversations(memories: Memory[]) {
   return memories
     .map(
       (memory) =>
-        `- [local_datetime: ${localIso(new Date(memory.createdAt))}; timezone: ${timezone()}] ${memory.content}`,
+        `- [local_datetime: ${localIso(new Date(memory.createdAt))}; timezone: ${timezone()}] ${memory.content.replaceAll("\n", "\n  ")}`,
     )
     .join("\n");
 }
