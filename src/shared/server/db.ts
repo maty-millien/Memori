@@ -7,7 +7,7 @@ import {
   IMPORTANCES,
   SCOPES,
   type ChatSettings,
-  type Episode,
+  type Conversation,
   type Importance,
   type Memory,
   type MemoriUIMessage,
@@ -30,7 +30,7 @@ db.exec(`
     access_count INTEGER NOT NULL DEFAULT 0,
     embedding BLOB NOT NULL
   );
-  CREATE TABLE IF NOT EXISTS episodes (
+  CREATE TABLE IF NOT EXISTS conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     content TEXT NOT NULL,
     created_at TEXT NOT NULL,
@@ -41,7 +41,7 @@ db.exec(`
     role TEXT NOT NULL,
     parts TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    episode_id INTEGER
+    conversation_id INTEGER
   );
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -75,9 +75,9 @@ const memoryRow = z
     accessCount: row.access_count,
   }));
 
-const episodeRow = z
+const conversationRow = z
   .object({ id: z.number(), content: z.string(), created_at: z.string() })
-  .transform((row): Episode => ({
+  .transform((row): Conversation => ({
     id: String(row.id),
     content: row.content,
     createdAt: row.created_at,
@@ -122,26 +122,28 @@ export function listMemoryVectors() {
     }));
 }
 
-export function listEpisodes() {
+export function listConversations() {
   return db
-    .prepare("SELECT id, content, created_at FROM episodes ORDER BY id")
+    .prepare("SELECT id, content, created_at FROM conversations ORDER BY id")
     .all()
-    .map((row) => episodeRow.parse(row));
+    .map((row) => conversationRow.parse(row));
 }
 
-export function listEpisodeVectors() {
+export function listConversationVectors() {
   return db
-    .prepare("SELECT id, content, created_at, embedding FROM episodes")
+    .prepare("SELECT id, content, created_at, embedding FROM conversations")
     .all()
     .map((row) => ({
-      episode: episodeRow.parse(row),
+      conversation: conversationRow.parse(row),
       embedding: fromBlob(vectorRow.parse(row).embedding),
     }));
 }
 
-export function insertEpisode(content: string, embedding: Float32Array) {
+export function insertConversation(content: string, embedding: Float32Array) {
   const result = db
-    .prepare("INSERT INTO episodes (content, created_at, embedding) VALUES (?, ?, ?)")
+    .prepare(
+      "INSERT INTO conversations (content, created_at, embedding) VALUES (?, ?, ?)",
+    )
     .run(content, new Date().toISOString(), toBlob(embedding));
   return String(result.lastInsertRowid);
 }
@@ -192,7 +194,7 @@ export function markAccessed(ids: string[]) {
 
 export function resetDatabase() {
   db.exec(
-    "DELETE FROM memories; DELETE FROM episodes; DELETE FROM messages; DELETE FROM settings; DELETE FROM thread_items; DELETE FROM sqlite_sequence;",
+    "DELETE FROM memories; DELETE FROM conversations; DELETE FROM messages; DELETE FROM settings; DELETE FROM thread_items; DELETE FROM sqlite_sequence;",
   );
 }
 
@@ -216,7 +218,7 @@ export function listMessages() {
 }
 
 export function listLiveMessages() {
-  return queryMessages("WHERE episode_id IS NULL");
+  return queryMessages("WHERE conversation_id IS NULL");
 }
 
 export function saveMessage(message: MemoriUIMessage) {
@@ -234,10 +236,10 @@ export function updateMessageParts(id: string, parts: MemoriUIMessage["parts"]) 
   db.prepare("UPDATE messages SET parts = ? WHERE id = ?").run(JSON.stringify(parts), id);
 }
 
-export function assignEpisode(messageIds: string[], episodeId: string) {
-  const statement = db.prepare("UPDATE messages SET episode_id = ? WHERE id = ?");
+export function assignConversation(messageIds: string[], conversationId: string) {
+  const statement = db.prepare("UPDATE messages SET conversation_id = ? WHERE id = ?");
   for (const id of messageIds) {
-    statement.run(episodeId, id);
+    statement.run(conversationId, id);
   }
 }
 

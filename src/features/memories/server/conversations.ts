@@ -1,6 +1,10 @@
 import type { MemoriUIMessage } from "@/shared/lib/memori";
 import { runOnce } from "@/shared/server/codex";
-import { assignEpisode, getThreadItems, insertEpisode } from "@/shared/server/db";
+import {
+  assignConversation,
+  getThreadItems,
+  insertConversation,
+} from "@/shared/server/db";
 
 import { embedOne } from "./embeddings";
 import { transcript } from "./prompting";
@@ -15,7 +19,7 @@ const SUMMARY_PROMPT =
   "Open: unanswered questions and next steps.\n" +
   "Keep only what this conversation adds. Skip greetings, small talk, and general facts about the user.";
 
-export async function createEpisode(history: MemoriUIMessage[]) {
+export async function archiveConversation(history: MemoriUIMessage[]) {
   const weights = history.map(
     (message) => JSON.stringify(getThreadItems(message.id) ?? message.parts).length,
   );
@@ -27,19 +31,19 @@ export async function createEpisode(history: MemoriUIMessage[]) {
     return reached;
   });
   const messages = history.slice(0, cut === -1 ? history.length : cut);
-  const conversation = transcript(messages);
-  if (!conversation) {
+  const log = transcript(messages);
+  if (!log) {
     return null;
   }
-  const { text } = await runOnce(SUMMARY_PROMPT, conversation);
+  const { text } = await runOnce(SUMMARY_PROMPT, log);
   const summary = text.trim();
   if (!summary) {
     return null;
   }
-  const episodeId = insertEpisode(summary, await embedOne(summary, "document"));
-  assignEpisode(
+  const conversationId = insertConversation(summary, await embedOne(summary, "document"));
+  assignConversation(
     messages.map((message) => message.id),
-    episodeId,
+    conversationId,
   );
-  return { episodeId, summary, messageCount: messages.length };
+  return { summary, messageCount: messages.length };
 }

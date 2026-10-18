@@ -5,7 +5,7 @@ import { formatDate, formatNumber, formatSeconds } from "@/shared/lib/format";
 import {
   effortLabel,
   type CallUsage,
-  type Episode,
+  type Conversation,
   type Memory,
   type MemoryOperation,
   type MemoriUIMessage,
@@ -190,12 +190,12 @@ function ConversationTable({
   recent,
   similar,
 }: {
-  recent: Episode[];
-  similar: Episode[];
+  recent: Conversation[];
+  similar: Conversation[];
 }) {
   const conversations = [
-    ...recent.map((episode) => ({ source: "Recent", episode })),
-    ...similar.map((episode) => ({ source: "Similar", episode })),
+    ...recent.map((conversation) => ({ source: "Recent", conversation })),
+    ...similar.map((conversation) => ({ source: "Similar", conversation })),
   ];
   return (
     <Table>
@@ -207,15 +207,15 @@ function ConversationTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {conversations.map(({ source, episode }) => (
-          <TableRow key={`${source}-${episode.id}`}>
+        {conversations.map(({ source, conversation }) => (
+          <TableRow key={`${source}-${conversation.id}`}>
             <TableCell className="min-w-64 whitespace-normal">
-              {episode.content}
+              {conversation.content}
             </TableCell>
             <TableCell>
               <Badge variant="outline">{source}</Badge>
             </TableCell>
-            <TableCell>{formatDate(episode.createdAt)}</TableCell>
+            <TableCell>{formatDate(conversation.createdAt)}</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -362,7 +362,7 @@ export function DebugDialog({ message }: { message: MemoriUIMessage }) {
         ) : null}
         {compaction ? (
           <Section
-            title="Episode"
+            title="Compaction"
             summary={`${compaction.messageCount} messages summarized`}
           >
             <p className="text-sm">{compaction.summary}</p>

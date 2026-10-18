@@ -1,5 +1,9 @@
 import type { Memory, RetrievedMemory } from "@/shared/lib/memori";
-import { listEpisodeVectors, listMemoryVectors, markAccessed } from "@/shared/server/db";
+import {
+  listConversationVectors,
+  listMemoryVectors,
+  markAccessed,
+} from "@/shared/server/db";
 
 import { SETTINGS } from "./config";
 
@@ -72,17 +76,17 @@ export function retrieve(query: Float32Array, liveSince: string | undefined) {
     .slice(0, SETTINGS.retrievalTopK);
   markAccessed(retrieved.map((item) => item.memory.id));
 
-  const episodes = listEpisodeVectors();
-  const recent = episodes
-    .map(({ episode }) => episode)
+  const conversations = listConversationVectors();
+  const recent = conversations
+    .map(({ conversation }) => conversation)
     .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, SETTINGS.recentConversations);
-  const recentIds = new Set(recent.map((episode) => episode.id));
+  const recentIds = new Set(recent.map((conversation) => conversation.id));
   const similar = nearest(
-    episodes.filter(({ episode }) => !recentIds.has(episode.id)),
+    conversations.filter(({ conversation }) => !recentIds.has(conversation.id)),
     query,
     SETTINGS.similarConversations,
-  ).map(({ vector }) => vector.episode);
+  ).map(({ vector }) => vector.conversation);
 
   return { memories: retrieved, recent, similar, live };
 }

@@ -52,7 +52,7 @@ export type Memory = {
   accessCount: number;
 };
 
-export type Episode = Pick<Memory, "id" | "content" | "createdAt">;
+export type Conversation = Pick<Memory, "id" | "content" | "createdAt">;
 
 export type Score = {
   similarity: number;
@@ -84,7 +84,11 @@ export type MemoryOperation = {
 };
 
 type MemoriData = {
-  retrieval: { memories: RetrievedMemory[]; recent: Episode[]; similar: Episode[] };
+  retrieval: {
+    memories: RetrievedMemory[];
+    recent: Conversation[];
+    similar: Conversation[];
+  };
   prompt: { prompt: string };
   thought: { ms: number };
   command: { command: string; running: boolean; exitCode: number | null; output: string };
@@ -95,7 +99,7 @@ type MemoriData = {
   steer: { text: string };
   stopped: Record<string, never>;
   curation: { prompt: string; operations: MemoryOperation[] };
-  compaction: { episodeId: string; summary: string; messageCount: number };
+  compaction: { summary: string; messageCount: number };
   usage: {
     retrievalMs: number;
     chat: CallUsage;

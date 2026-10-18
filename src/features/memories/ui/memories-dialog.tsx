@@ -2,7 +2,7 @@ import { IconBrain, IconMessages } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
 import { formatDate } from "@/shared/lib/format";
-import type { Episode, Memory } from "@/shared/lib/memori";
+import type { Conversation, Memory } from "@/shared/lib/memori";
 import { Badge } from "@/shared/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import {
@@ -59,7 +59,7 @@ function MemoryTable({ memories }: { memories: Memory[] }) {
   );
 }
 
-function EpisodeTable({ episodes }: { episodes: Episode[] }) {
+function ConversationTable({ conversations }: { conversations: Conversation[] }) {
   return (
     <Table>
       <TableHeader>
@@ -70,13 +70,13 @@ function EpisodeTable({ episodes }: { episodes: Episode[] }) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {episodes.map((episode) => (
-          <TableRow key={episode.id}>
-            <TableCell>{episode.id}</TableCell>
+        {conversations.map((conversation) => (
+          <TableRow key={conversation.id}>
+            <TableCell>{conversation.id}</TableCell>
             <TableCell className="min-w-80 whitespace-pre-line">
-              {episode.content}
+              {conversation.content}
             </TableCell>
-            <TableCell>{formatDate(episode.createdAt)}</TableCell>
+            <TableCell>{formatDate(conversation.createdAt)}</TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -118,7 +118,7 @@ export function MemoriesDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   memories: Memory[];
-  conversations: Episode[];
+  conversations: Conversation[];
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,7 +130,7 @@ export function MemoriesDialog({
           <TabsList>
             <TabsTrigger value="memories">Memories ・{memories.length}</TabsTrigger>
             <TabsTrigger value="conversations">
-              Episodes ・{conversations.length}
+              Conversations ・{conversations.length}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="memories" className="min-h-0 overflow-y-auto">
@@ -145,10 +145,12 @@ export function MemoriesDialog({
           <TabsContent value="conversations" className="min-h-0 overflow-y-auto">
             <List
               icon={<IconMessages />}
-              title="No episodes"
-              description="Episodes appear when the chat passes 100k tokens of context."
+              title="No conversations"
+              description="Conversations appear when the chat passes 100k tokens of context."
             >
-              {conversations.length > 0 && <EpisodeTable episodes={conversations} />}
+              {conversations.length > 0 && (
+                <ConversationTable conversations={conversations} />
+              )}
             </List>
           </TabsContent>
         </Tabs>

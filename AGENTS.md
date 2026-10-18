@@ -2,7 +2,7 @@
 
 ## Description
 
-Memori is a local research app for long-term agent memory. There is a single endless chat. The server runs its own agent loop against the Codex Responses endpoint (`chatgpt.com/backend-api/codex/responses`) with the Codex CLI login, and gives the model a `shell` tool plus the hosted `web_search` tool. Each turn retrieves ranked memories and episode summaries and injects only the ones the thread has not seen. A separate Codex call returns memory operations (upsert or delete) that the server applies. When the context passes 100k tokens, the oldest half of the live messages is summarized into an episode (a conversation memory), and later turns send only the stored response items of the remaining live messages. An info icon under each reply opens a debug dialog with the full trace of the turn.
+Memori is a local research app for long-term agent memory. There is a single endless chat. The server runs its own agent loop against the Codex Responses endpoint (`chatgpt.com/backend-api/codex/responses`) with the Codex CLI login, and gives the model a `shell` tool plus the hosted `web_search` tool. Each turn retrieves ranked memories and summaries of past conversations and injects only the ones the thread has not seen. A separate Codex call returns memory operations (upsert or delete) that the server applies. When the context passes 100k tokens, the oldest half of the live messages is summarized into a past conversation, and later turns send only the stored response items of the remaining live messages. An info icon under each reply opens a debug dialog with the full trace of the turn.
 
 ## Project rules
 
@@ -14,7 +14,7 @@ Memori is a local research app for long-term agent memory. There is a single end
 
 - `src/routes/`: TanStack Start file routes. Keep them thin: a loader, the page component, and API handlers that validate input and call feature code.
 - `src/features/chat/`: the chat page (`ui/`) and the agent turn (`server/`).
-- `src/features/memories/`: the memories dialog (`ui/`) and the memory pipeline (`server/`): retrieval, curation, episodes, embeddings, prompt formatting, and ranking settings in `config.ts`.
+- `src/features/memories/`: the memories dialog (`ui/`) and the memory pipeline (`server/`): retrieval, curation, past conversations, embeddings, prompt formatting, and ranking settings in `config.ts`.
 - `src/shared/`: code used by both features only. `ui/` holds shadcn components, `lib/` holds types and helpers that run in the browser and on the server, `server/` holds the database, the Codex client, and uploads.
 
 Dependencies point one way: routes -> features -> shared. `features/chat` may import `features/memories`, never the reverse.

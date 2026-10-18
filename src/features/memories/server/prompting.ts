@@ -1,6 +1,6 @@
 import {
   messageText,
-  type Episode,
+  type Conversation,
   type Memory,
   type MemoriUIMessage,
 } from "@/shared/lib/memori";
@@ -37,11 +37,11 @@ export function formatMemories(memories: Memory[]) {
     .join("\n");
 }
 
-function formatConversations(episodes: Episode[]) {
-  return episodes
+function formatConversations(conversations: Conversation[]) {
+  return conversations
     .map(
-      (episode) =>
-        `- [local_datetime: ${localIso(new Date(episode.createdAt))}; timezone: ${timezone()}] ${episode.content.replaceAll("\n", "\n  ")}`,
+      (conversation) =>
+        `- [local_datetime: ${localIso(new Date(conversation.createdAt))}; timezone: ${timezone()}] ${conversation.content.replaceAll("\n", "\n  ")}`,
     )
     .join("\n");
 }
@@ -49,8 +49,8 @@ function formatConversations(episodes: Episode[]) {
 export function buildContextPrompt(
   content: string,
   memories: Memory[],
-  recent: Episode[],
-  similar: Episode[],
+  recent: Conversation[],
+  similar: Conversation[],
 ) {
   const blocks = [];
   if (recent.length > 0) {

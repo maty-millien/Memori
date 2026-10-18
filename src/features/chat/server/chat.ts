@@ -6,9 +6,9 @@ import {
 import { z } from "zod";
 
 import { SETTINGS } from "@/features/memories/server/config";
+import { archiveConversation } from "@/features/memories/server/conversations";
 import { curate } from "@/features/memories/server/curation";
 import { embedOne } from "@/features/memories/server/embeddings";
-import { createEpisode } from "@/features/memories/server/episodes";
 import {
   buildContextPrompt,
   formatMemories,
@@ -21,7 +21,7 @@ import { retrieve } from "@/features/memories/server/retrieval";
 import {
   CONTEXT_WINDOW,
   type CallUsage,
-  type Episode,
+  type Conversation,
   type Memory,
   type MemoriUIMessage,
   type Question,
@@ -116,7 +116,7 @@ const errorMessage = (error: unknown) =>
 
 const memoryKey = (memory: Memory) => `${memory.id}@${memory.updatedAt}`;
 
-const episodeKey = (episode: Episode) => `episode:${episode.id}`;
+const conversationKey = (conversation: Conversation) => `conversation:${conversation.id}`;
 
 const FULL_TOOL_OUTPUT_TURNS = 3;
 
@@ -195,7 +195,7 @@ export function chatResponse(messageId: string, userText: string) {
             part.type === "data-retrieval"
               ? [
                   ...part.data.memories.map((item) => memoryKey(item.memory)),
-                  ...[...part.data.recent, ...part.data.similar].map(episodeKey),
+                  ...[...part.data.recent, ...part.data.similar].map(conversationKey),
                 ]
               : [],
           ),
@@ -210,8 +210,8 @@ export function chatResponse(messageId: string, userText: string) {
           retrieval.memories.map((item) => item.memory),
           memoryKey,
         ),
-        unseen(retrieval.recent, episodeKey),
-        unseen(retrieval.similar, episodeKey),
+        unseen(retrieval.recent, conversationKey),
+        unseen(retrieval.similar, conversationKey),
       );
       writer.write({ type: "data-retrieval", data: retrieval });
       writer.write({ type: "data-prompt", data: { prompt } });
@@ -602,9 +602,9 @@ export function chatResponse(messageId: string, userText: string) {
 
         if (reply.context > CONTEXT_WINDOW) {
           try {
-            const episode = await createEpisode(history);
-            if (episode) {
-              parts.push({ type: "data-compaction", data: episode });
+            const compaction = await archiveConversation(history);
+            if (compaction) {
+              parts.push({ type: "data-compaction", data: compaction });
             }
           } catch (error) {
             parts.push({ type: "data-error", data: { message: errorMessage(error) } });

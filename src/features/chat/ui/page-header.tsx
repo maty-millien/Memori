@@ -2,9 +2,9 @@ import { IconBrain, IconMenu2, IconStack2, IconTrash } from "@tabler/icons-react
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { resetEverything, triggerEpisode } from "@/features/memories/server/functions";
+import { resetEverything, triggerCompaction } from "@/features/memories/server/functions";
 import { MemoriesDialog } from "@/features/memories/ui/memories-dialog";
-import type { Episode, Memory } from "@/shared/lib/memori";
+import type { Conversation, Memory } from "@/shared/lib/memori";
 import { cn } from "@/shared/lib/utils";
 import {
   AlertDialog,
@@ -44,17 +44,17 @@ export function PageHeader({
 }: {
   className?: string;
   memories: Memory[];
-  conversations: Episode[];
+  conversations: Conversation[];
 }) {
   const router = useRouter();
   const [summarizing, setSummarizing] = useState(false);
   const [memoriesOpen, setMemoriesOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
 
-  async function newEpisode() {
+  async function compactNow() {
     setSummarizing(true);
     try {
-      await triggerEpisode();
+      await triggerCompaction();
       await router.invalidate();
     } finally {
       setSummarizing(false);
@@ -104,10 +104,10 @@ export function PageHeader({
           <DropdownMenuItem
             closeOnClick={false}
             disabled={summarizing}
-            onClick={() => void newEpisode()}
+            onClick={() => void compactNow()}
           >
             {summarizing ? <Spinner /> : <IconStack2 />}
-            New episode
+            Compact now
           </DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onClick={() => setResetOpen(true)}>
             <IconTrash />
@@ -126,7 +126,8 @@ export function PageHeader({
           <AlertDialogHeader>
             <AlertDialogTitle>Reset everything?</AlertDialogTitle>
             <AlertDialogDescription>
-              This deletes the chat, every memory and episode, and the model settings.
+              This deletes the chat, every memory and past conversation, and the model
+              settings.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

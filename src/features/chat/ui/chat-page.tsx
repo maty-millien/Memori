@@ -8,7 +8,7 @@ import { saveChatSettings, steerChat, stopChat } from "@/features/chat/server/fu
 import type {
   ChatModel,
   ChatSettings,
-  Episode,
+  Conversation,
   MemoriUIMessage,
   Memory,
 } from "@/shared/lib/memori";
@@ -73,7 +73,7 @@ export function ChatPage({
   models: ChatModel[];
   initialChatSettings: ChatSettings;
   memories: Memory[];
-  conversations: Episode[];
+  conversations: Conversation[];
 }) {
   const router = useRouter();
   const [chatSettings, setChatSettings] = useState(initialChatSettings);
