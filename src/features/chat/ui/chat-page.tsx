@@ -121,7 +121,7 @@ export function ChatPage({
                   key={message.id}
                   messageId={message.id}
                   scrollAnchor={message.role === "user"}
-                  className="-mx-2 px-2"
+                  className="-mx-4 -my-2 px-4 py-2"
                 >
                   {message.role === "user" ? (
                     <UserTurn message={message} />
