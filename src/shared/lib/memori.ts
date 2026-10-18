@@ -89,7 +89,7 @@ type MemoriData = {
   prompt: { prompt: string };
   thought: { ms: number };
   command: { command: string; running: boolean; exitCode: number | null; output: string };
-  search: { query: string; running: boolean };
+  search: { query: string; url?: string; running: boolean };
   read: { path: string; running: boolean };
   patch: { patch: string; running: boolean; output: string };
   question: { questions: Question[]; answers: string[][] | null };

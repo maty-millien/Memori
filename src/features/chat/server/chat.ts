@@ -485,7 +485,11 @@ export function chatResponse(messageId: string, userText: string) {
                 writer.write({
                   type: "data-search",
                   id,
-                  data: { query: output.action?.query ?? "", running: !done },
+                  data: {
+                    query: output.action?.query ?? "",
+                    url: output.action?.url,
+                    running: !done,
+                  },
                 });
                 if (done) {
                   since = performance.now();

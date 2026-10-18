@@ -27,7 +27,9 @@ export const itemSchema = z.looseObject({
   call_id: z.string().optional(),
   arguments: z.string().optional(),
   summary: z.array(z.looseObject({ text: z.string() })).optional(),
-  action: z.looseObject({ query: z.string().optional() }).optional(),
+  action: z
+    .looseObject({ query: z.string().optional(), url: z.string().optional() })
+    .optional(),
   content: z.array(z.looseObject({ text: z.string().optional() })).optional(),
 });
 

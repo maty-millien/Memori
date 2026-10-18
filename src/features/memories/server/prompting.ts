@@ -88,7 +88,11 @@ function assistantLines(message: MemoriUIMessage) {
       return [`assistant read: ${part.data.path}`];
     }
     if (part.type === "data-search") {
-      return [`assistant searched: ${part.data.query}`];
+      return [
+        part.data.url
+          ? `assistant opened: ${part.data.url}`
+          : `assistant searched: ${part.data.query}`,
+      ];
     }
     return [];
   });

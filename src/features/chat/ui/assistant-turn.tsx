@@ -218,9 +218,17 @@ function TimelinePart({ part }: { part: Part }) {
         <ToolStep
           icon={<IconWorldSearch />}
           running={part.data.running}
-          details={[{ label: "Query", text: part.data.query }]}
+          details={[
+            part.data.url
+              ? { label: "URL", text: part.data.url }
+              : { label: "Query", text: part.data.query },
+          ]}
         >
-          {part.data.running ? "Searching the web" : "Searched the web"}
+          {part.data.running
+            ? "Searching the web"
+            : part.data.url
+              ? "Opened a page"
+              : "Searched the web"}
         </ToolStep>
       );
     case "data-patch":
