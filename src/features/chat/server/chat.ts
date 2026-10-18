@@ -1,8 +1,3 @@
-import { spawn } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, extname, resolve } from "node:path";
-
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -28,6 +23,7 @@ import {
   type CallUsage,
   type Memory,
   type MemoriUIMessage,
+  type Question,
 } from "@/shared/lib/memori";
 import {
   chatOptions,
@@ -43,7 +39,15 @@ import {
   saveThreadItems,
 } from "@/shared/server/db";
 
-import { CHAT_PROMPT } from "./prompts";
+import { CHAT_PROMPT, PATCH_DESCRIPTION, QUESTION_DESCRIPTION } from "./prompts";
+import {
+  applyPatch,
+  read,
+  READ_MAX_LINES,
+  shell,
+  SHELL_MAX_LINES,
+  SHELL_TIMEOUT_MS,
+} from "./tools";
 
 type Chunk = InferUIMessageChunk<MemoriUIMessage>;
 
@@ -54,6 +58,19 @@ let activeTurn: {
 } | null = null;
 
 export const activeUserMessage = () => activeTurn?.userMessage;
+
+const questionSchema = z.object({
+  question: z.string(),
+  header: z.string(),
+  options: z.array(z.object({ label: z.string(), description: z.string() })),
+  multiple: z.boolean(),
+}) satisfies z.ZodType<Question>;
+
+const pendingQuestions = new Map<string, (answers: string[][]) => void>();
+
+export function answerQuestion(id: string, answers: string[][]) {
+  pendingQuestions.get(id)?.(answers);
+}
 
 export function resumeResponse() {
   const turn = activeTurn;
@@ -80,161 +97,6 @@ const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 const memoryKey = (memory: Memory) => `${memory.id}@${memory.updatedAt}`;
-
-const SHELL_TIMEOUT_MS = 120_000;
-const SHELL_MAX_LINES = 2_000;
-const SHELL_MAX_BYTES = 50 * 1024;
-const SHELL_OUTPUT_DIR = ".memori/shell";
-
-const READ_MAX_LINES = 2_000;
-const READ_MAX_LINE_LENGTH = 2_000;
-const READ_MAX_BYTES = 50 * 1024;
-const READ_MAX_FILE_BYTES = 20 * 1024 * 1024;
-const MEDIA_TYPES: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".gif": "image/gif",
-  ".pdf": "application/pdf",
-};
-
-type ShellResult = { output: string; exitCode: number | null };
-
-const homePath = (path: string) =>
-  resolve(homedir(), path.replace(/^~(?=$|\/)/, homedir()));
-
-function shell(command: string, workdir: string | null, timeout: number | null) {
-  const cwd = homePath(workdir ?? ".");
-  if (!statSync(cwd, { throwIfNoEntry: false })?.isDirectory()) {
-    return Promise.resolve<ShellResult>({
-      output: `Working directory is not a directory: ${cwd}`,
-      exitCode: null,
-    });
-  }
-  const ms = timeout ?? SHELL_TIMEOUT_MS;
-  return new Promise<ShellResult>((done) => {
-    const child = spawn("/bin/zsh", ["-c", command], {
-      cwd,
-      env: { ...process.env, TERM: "xterm-256color", AGENT: "1" },
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
-    });
-    const chunks: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => chunks.push(chunk));
-    const kill = (signal: NodeJS.Signals) => {
-      try {
-        process.kill(-child.pid!, signal);
-      } catch {}
-    };
-    let timedOut = false;
-    const timer =
-      ms > 0
-        ? setTimeout(() => {
-            timedOut = true;
-            kill("SIGTERM");
-            setTimeout(() => kill("SIGKILL"), 3_000).unref();
-          }, ms)
-        : undefined;
-    child.on("close", (exitCode, signal) => {
-      clearTimeout(timer);
-      const text = Buffer.concat(chunks).toString("utf8");
-      const lines = text.replace(/\n$/, "").split("\n");
-      let shown = lines.slice(-SHELL_MAX_LINES).join("\n");
-      if (Buffer.byteLength(shown) > SHELL_MAX_BYTES) {
-        shown = Buffer.from(shown).subarray(-SHELL_MAX_BYTES).toString("utf8");
-      }
-      let body = shown || "(no output)";
-      if (shown.length < lines.join("\n").length) {
-        mkdirSync(SHELL_OUTPUT_DIR, { recursive: true });
-        const file = resolve(SHELL_OUTPUT_DIR, `${crypto.randomUUID()}.out`);
-        writeFileSync(file, text);
-        const count = shown.split("\n").length;
-        body += `\n\n[showing lines ${lines.length - count + 1}-${lines.length} of ${lines.length}; full output saved to ${file}]`;
-      }
-      const status = timedOut
-        ? `Command exceeded timeout of ${ms} ms. Retry with a larger timeout if the command is expected to take longer.`
-        : signal
-          ? `Killed by ${signal}`
-          : exitCode !== 0
-            ? `Exited with code ${exitCode}`
-            : "";
-      done({ output: [body, status].filter(Boolean).join("\n\n"), exitCode });
-    });
-  });
-}
-
-function read(
-  path: string,
-  offset: number | null,
-  limit: number | null,
-  images: boolean,
-) {
-  const file = homePath(path);
-  const stats = statSync(file, { throwIfNoEntry: false });
-  if (!stats) {
-    return `File not found: ${file}`;
-  }
-  let lines: string[];
-  if (stats.isDirectory()) {
-    lines = readdirSync(file, { withFileTypes: true })
-      .map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name))
-      .toSorted();
-  } else {
-    if (stats.size > READ_MAX_FILE_BYTES) {
-      return `File is larger than 20 MB: ${file}`;
-    }
-    const bytes = readFileSync(file);
-    const mediaType = MEDIA_TYPES[extname(file).toLowerCase()];
-    const data = `data:${mediaType};base64,${bytes.toString("base64")}`;
-    if (mediaType === "application/pdf") {
-      return [{ type: "input_file", filename: basename(file), file_data: data }];
-    }
-    if (mediaType) {
-      return images
-        ? [{ type: "input_image", image_url: data }]
-        : "The current model can't view images.";
-    }
-    if (bytes.subarray(0, 8192).includes(0)) {
-      return `Cannot read binary file: ${file}`;
-    }
-    if (bytes.length === 0) {
-      return "(empty file)";
-    }
-    lines = bytes
-      .toString("utf8")
-      .replace(/\n$/, "")
-      .split("\n")
-      .map((line, index) =>
-        line.length > READ_MAX_LINE_LENGTH
-          ? `${index + 1}: ${line.slice(0, READ_MAX_LINE_LENGTH)}... (line truncated)`
-          : `${index + 1}: ${line}`,
-      );
-  }
-  const start = Math.max(offset ?? 1, 1) - 1;
-  const shown: string[] = [];
-  let size = 0;
-  for (const line of lines.slice(
-    start,
-    start + Math.min(limit ?? READ_MAX_LINES, READ_MAX_LINES),
-  )) {
-    size += Buffer.byteLength(line) + 1;
-    if (size > READ_MAX_BYTES) {
-      break;
-    }
-    shown.push(line);
-  }
-  const end = start + shown.length;
-  const note =
-    end < lines.length
-      ? `\n\n(Showing ${start + 1}-${end} of ${lines.length}. Use offset ${end + 1} to read more.)`
-      : "";
-  return (
-    (shown.join("\n") ||
-      `Nothing at offset ${start + 1}: there are ${lines.length} lines.`) + note
-  );
-}
 
 function seedItems(history: MemoriUIMessage[]) {
   return history.flatMap((message) =>
@@ -401,12 +263,135 @@ export function chatResponse(messageId: string, text: string) {
           return result;
         },
       };
+      const patchTool: Tool = {
+        definition: {
+          type: "function",
+          name: "patch",
+          description: PATCH_DESCRIPTION,
+          strict: true,
+          parameters: {
+            type: "object",
+            properties: {
+              patchText: {
+                type: "string",
+                description:
+                  "The full patch text describing add, update, and delete operations",
+              },
+            },
+            required: ["patchText"],
+            additionalProperties: false,
+          },
+        },
+        run: async (args, callId) => {
+          const { patchText } = z
+            .object({ patchText: z.string() })
+            .parse(JSON.parse(args));
+          const data = { patch: patchText, running: true, output: "" };
+          thought();
+          writer.write({ type: "data-patch", id: callId, data });
+          let output: string;
+          try {
+            output = applyPatch(patchText);
+          } catch (error) {
+            output = `Patch failed: ${errorMessage(error)}`;
+          }
+          writer.write({
+            type: "data-patch",
+            id: callId,
+            data: { ...data, running: false, output },
+          });
+          since = performance.now();
+          return output;
+        },
+      };
+      const questionTool: Tool = {
+        definition: {
+          type: "function",
+          name: "question",
+          description: QUESTION_DESCRIPTION,
+          strict: true,
+          parameters: {
+            type: "object",
+            properties: {
+              questions: {
+                type: "array",
+                description: "Questions to ask",
+                items: {
+                  type: "object",
+                  properties: {
+                    question: { type: "string", description: "Complete question" },
+                    header: {
+                      type: "string",
+                      description: "Very short label (max 30 chars)",
+                    },
+                    options: {
+                      type: "array",
+                      description: "Available choices",
+                      items: {
+                        type: "object",
+                        properties: {
+                          label: {
+                            type: "string",
+                            description: "Display text (1-5 words, concise)",
+                          },
+                          description: {
+                            type: "string",
+                            description: "Explanation of choice",
+                          },
+                        },
+                        required: ["label", "description"],
+                        additionalProperties: false,
+                      },
+                    },
+                    multiple: {
+                      type: "boolean",
+                      description: "Allow selecting multiple choices",
+                    },
+                  },
+                  required: ["question", "header", "options", "multiple"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["questions"],
+            additionalProperties: false,
+          },
+        },
+        run: async (args, callId) => {
+          const { questions } = z
+            .object({ questions: z.array(questionSchema).min(1) })
+            .parse(JSON.parse(args));
+          thought();
+          writer.write({
+            type: "data-question",
+            id: callId,
+            data: { questions, answers: null },
+          });
+          const answers = await new Promise<string[][]>((resolve) =>
+            pendingQuestions.set(callId, resolve),
+          );
+          pendingQuestions.delete(callId);
+          writer.write({
+            type: "data-question",
+            id: callId,
+            data: { questions, answers },
+          });
+          since = performance.now();
+          const formatted = questions
+            .map(
+              (question, index) =>
+                `"${question.question}"="${answers[index]?.length ? answers[index].join(", ") : "Unanswered"}"`,
+            )
+            .join(", ");
+          return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`;
+        },
+      };
       const reply = await runAgent({
         instructions: CHAT_PROMPT,
         input: [...seedItems(history), userItem],
         model: chatSettings.model,
         effort: chatSettings.effort,
-        tools: [shellTool, readTool],
+        tools: [shellTool, readTool, patchTool, questionTool],
         webSearch: true,
         onEvent: (event) => {
           if (event.type === "response.output_text.delta" && event.item_id) {

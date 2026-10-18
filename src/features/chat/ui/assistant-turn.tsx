@@ -4,6 +4,8 @@ import {
   IconChevronRight,
   IconCopy,
   IconFile,
+  IconFileDiff,
+  IconMessageQuestion,
   IconTerminal2,
   IconWorldSearch,
 } from "@tabler/icons-react";
@@ -11,7 +13,8 @@ import { useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { messageText, type MemoriUIMessage } from "@/shared/lib/memori";
+import { sendAnswers } from "@/features/chat/server/functions";
+import { messageText, type MemoriUIMessage, type Question } from "@/shared/lib/memori";
 import { cn } from "@/shared/lib/utils";
 import { Bubble, BubbleContent } from "@/shared/ui/bubble";
 import { Button } from "@/shared/ui/button";
@@ -101,6 +104,80 @@ function ToolStep({
   );
 }
 
+function QuestionCard({ id, questions }: { id: string; questions: Question[] }) {
+  const [selected, setSelected] = useState<string[][]>(() => questions.map(() => []));
+  const [custom, setCustom] = useState<string[]>(() => questions.map(() => ""));
+  const [sending, setSending] = useState(false);
+  const answers = questions.map((_, index) => [
+    ...selected[index],
+    ...(custom[index].trim() ? [custom[index].trim()] : []),
+  ]);
+
+  function choose(index: number, label: string) {
+    const { multiple } = questions[index];
+    const labels = selected[index];
+    setSelected(
+      selected.with(
+        index,
+        !multiple
+          ? [label]
+          : labels.includes(label)
+            ? labels.filter((other) => other !== label)
+            : [...labels, label],
+      ),
+    );
+    if (!multiple) {
+      setCustom(custom.with(index, ""));
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5 rounded-2xl border bg-popover p-4">
+      {questions.map((question, index) => (
+        <div key={question.question} className="flex flex-col gap-2">
+          <div className="text-xs text-muted-foreground">{question.header}</div>
+          <div>{question.question}</div>
+          {question.options.map((option) => (
+            <button
+              key={option.label}
+              type="button"
+              className={cn(
+                "cursor-pointer rounded-xl border px-3 py-2 text-left text-sm transition hover:bg-accent",
+                selected[index].includes(option.label) && "border-primary bg-accent",
+              )}
+              onClick={() => choose(index, option.label)}
+            >
+              <div>{option.label}</div>
+              <div className="text-muted-foreground">{option.description}</div>
+            </button>
+          ))}
+          <input
+            value={custom[index]}
+            placeholder="Type your own answer"
+            className="rounded-xl border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
+            onChange={(event) => {
+              setCustom(custom.with(index, event.target.value));
+              if (!question.multiple) {
+                setSelected(selected.with(index, []));
+              }
+            }}
+          />
+        </div>
+      ))}
+      <Button
+        className="self-end rounded-full"
+        disabled={sending || answers.some((answer) => answer.length === 0)}
+        onClick={() => {
+          setSending(true);
+          void sendAnswers({ data: { id, answers } });
+        }}
+      >
+        {sending ? <Spinner /> : "Send"}
+      </Button>
+    </div>
+  );
+}
+
 function TimelinePart({ part }: { part: Part }) {
   switch (part.type) {
     case "text":
@@ -144,6 +221,34 @@ function TimelinePart({ part }: { part: Part }) {
         >
           {part.data.running ? "Searching the web" : "Searched the web"}
         </ToolStep>
+      );
+    case "data-patch":
+      return (
+        <ToolStep
+          icon={<IconFileDiff />}
+          running={part.data.running}
+          details={[
+            { label: "Patch", text: part.data.patch },
+            ...(part.data.running ? [] : [{ label: "Result", text: part.data.output }]),
+          ]}
+        >
+          {part.data.running ? "Editing files" : "Edited files"}
+        </ToolStep>
+      );
+    case "data-question":
+      return part.data.answers ? (
+        <ToolStep
+          icon={<IconMessageQuestion />}
+          running={false}
+          details={part.data.questions.map((question, index) => ({
+            label: question.question,
+            text: part.data.answers?.[index]?.join(", ") || "Unanswered",
+          }))}
+        >
+          {part.data.questions.length === 1 ? "Asked a question" : "Asked questions"}
+        </ToolStep>
+      ) : (
+        <QuestionCard id={part.id ?? ""} questions={part.data.questions} />
       );
     case "data-read":
       return (
@@ -197,7 +302,9 @@ function isStep(part: Part) {
     part.type === "data-thought" ||
     part.type === "data-command" ||
     part.type === "data-search" ||
-    part.type === "data-read"
+    part.type === "data-read" ||
+    part.type === "data-patch" ||
+    part.type === "data-question"
   );
 }
 
@@ -215,9 +322,11 @@ export function AssistantTurn({
     !(
       (last?.type === "data-command" ||
         last?.type === "data-search" ||
-        last?.type === "data-read") &&
+        last?.type === "data-read" ||
+        last?.type === "data-patch") &&
       last.data.running
-    );
+    ) &&
+    !(last?.type === "data-question" && !last.data.answers);
   const text = messageText(message.parts, "\n\n");
   const usage = message.parts.find((part) => part.type === "data-usage");
   const answerIndex = message.parts.findLastIndex((part) => part.type === "text");

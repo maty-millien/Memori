@@ -15,6 +15,12 @@ export type Scope = (typeof SCOPES)[number];
 export type Kind = (typeof KINDS)[number];
 export type Importance = (typeof IMPORTANCES)[number];
 export type ChatSettings = { model: string; effort: string };
+export type Question = {
+  question: string;
+  header: string;
+  options: { label: string; description: string }[];
+  multiple: boolean;
+};
 export type ChatModel = {
   id: string;
   name: string;
@@ -85,6 +91,8 @@ type MemoriData = {
   command: { command: string; running: boolean; exitCode: number | null; output: string };
   search: { query: string; running: boolean };
   read: { path: string; running: boolean };
+  patch: { patch: string; running: boolean; output: string };
+  question: { questions: Question[]; answers: string[][] | null };
   curation: { prompt: string; operations: MemoryOperation[] };
   compaction: { episodeId: string; summary: string; messageCount: number };
   usage: {

@@ -72,6 +72,15 @@ function assistantLines(message: MemoriUIMessage) {
     if (part.type === "data-command") {
       return [`assistant ran: ${part.data.command}`];
     }
+    if (part.type === "data-patch") {
+      return [`assistant edited files: ${part.data.output}`];
+    }
+    if (part.type === "data-question") {
+      return part.data.questions.map(
+        (question, index) =>
+          `assistant asked: ${question.question} -> user answered: ${part.data.answers?.[index]?.join(", ") || "nothing"}`,
+      );
+    }
     if (part.type === "data-read") {
       return [`assistant read: ${part.data.path}`];
     }
