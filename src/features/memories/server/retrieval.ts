@@ -1,11 +1,14 @@
 import type { Memory, RetrievedMemory } from "@/shared/lib/memori";
 import {
+  listArchivedTurnVectors,
   listConversationVectors,
   listMemoryVectors,
   markAccessed,
+  searchArchivedTurns,
 } from "@/shared/server/db";
 
 import { SETTINGS } from "./config";
+import { embedOne } from "./embeddings";
 
 type Vector = { memory: Memory; embedding: Float32Array };
 
@@ -89,4 +92,24 @@ export function retrieve(query: Float32Array, liveSince: string | undefined) {
   ).map(({ vector }) => vector.conversation);
 
   return { memories: retrieved, recent, similar, live };
+}
+
+export async function recall(query: string) {
+  const semantic = nearest(
+    listArchivedTurnVectors(),
+    await embedOne(query, "query"),
+    SETTINGS.recallPoolK,
+  ).map(({ vector }) => vector.turn);
+  const lexical = searchArchivedTurns(query, SETTINGS.recallPoolK);
+  const fused = new Map<string, { content: string; score: number }>();
+  for (const list of [semantic, lexical]) {
+    list.forEach((turn, position) => {
+      const entry = fused.get(turn.id) ?? { content: turn.content, score: 0 };
+      fused.set(turn.id, { ...entry, score: entry.score + 1 / (60 + position) });
+    });
+  }
+  return [...fused.values()]
+    .toSorted((a, b) => b.score - a.score)
+    .slice(0, SETTINGS.recallTopK)
+    .map((entry) => entry.content);
 }

@@ -51,6 +51,7 @@ export function buildContextPrompt(
   memories: Memory[],
   recent: Conversation[],
   similar: Conversation[],
+  removed: string[],
 ) {
   const blocks = [];
   if (recent.length > 0) {
@@ -61,6 +62,11 @@ export function buildContextPrompt(
   }
   if (memories.length > 0) {
     blocks.push(wrap("relevant_memories", formatMemories(memories)));
+  }
+  if (removed.length > 0) {
+    blocks.push(
+      wrap("removed_memories", removed.map((id) => `- id: "${id}"`).join("\n")),
+    );
   }
   return [...blocks, content].join("\n\n");
 }

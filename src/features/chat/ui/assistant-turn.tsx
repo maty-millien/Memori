@@ -5,6 +5,7 @@ import {
   IconCopy,
   IconFile,
   IconFileDiff,
+  IconHistory,
   IconMessageQuestion,
   IconPlayerStopFilled,
   IconTerminal2,
@@ -277,6 +278,16 @@ function TimelinePart({ part }: { part: Part }) {
           {part.data.running ? "Reading a file" : "Read a file"}
         </ToolStep>
       );
+    case "data-recall":
+      return (
+        <ToolStep
+          icon={<IconHistory />}
+          running={part.data.running}
+          details={[{ label: "Query", text: part.data.query }]}
+        >
+          {part.data.running ? "Searching earlier messages" : "Searched earlier messages"}
+        </ToolStep>
+      );
     default:
       return null;
   }
@@ -320,6 +331,7 @@ function isStep(part: Part) {
     part.type === "data-command" ||
     part.type === "data-search" ||
     part.type === "data-read" ||
+    part.type === "data-recall" ||
     part.type === "data-patch" ||
     part.type === "data-question"
   );
@@ -340,6 +352,7 @@ export function AssistantTurn({
       (last?.type === "data-command" ||
         last?.type === "data-search" ||
         last?.type === "data-read" ||
+        last?.type === "data-recall" ||
         last?.type === "data-patch") &&
       last.data.running
     ) &&

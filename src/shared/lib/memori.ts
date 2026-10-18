@@ -94,6 +94,7 @@ type MemoriData = {
   command: { command: string; running: boolean; exitCode: number | null; output: string };
   search: { query: string; url?: string; running: boolean };
   read: { path: string; running: boolean };
+  recall: { query: string; running: boolean };
   patch: { patch: string; running: boolean; output: string };
   question: { questions: Question[]; answers: string[][] | null };
   steer: { text: string };

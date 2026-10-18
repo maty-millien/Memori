@@ -3,10 +3,11 @@ import { runOnce } from "@/shared/server/codex";
 import {
   assignConversation,
   getThreadItems,
+  insertArchivedTurns,
   insertConversation,
 } from "@/shared/server/db";
 
-import { embedOne } from "./embeddings";
+import { embed, embedOne } from "./embeddings";
 import { transcript } from "./prompting";
 
 const SUMMARY_PROMPT =
@@ -35,11 +36,35 @@ export async function archiveConversation(history: MemoriUIMessage[]) {
   if (!log) {
     return null;
   }
-  const { text } = await runOnce(SUMMARY_PROMPT, log);
+  const turns: MemoriUIMessage[][] = [];
+  for (const message of messages) {
+    const last = turns.at(-1);
+    if (message.role === "user" || !last) {
+      turns.push([message]);
+    } else {
+      last.push(message);
+    }
+  }
+  const indexed = turns
+    .map((turn) => ({
+      content: transcript(turn),
+      createdAt: turn[0].metadata?.createdAt ?? new Date().toISOString(),
+    }))
+    .filter((turn) => turn.content);
+  const [{ text }, embeddings] = await Promise.all([
+    runOnce(SUMMARY_PROMPT, log),
+    embed(
+      indexed.map((turn) => turn.content),
+      "document",
+    ),
+  ]);
   const summary = text.trim();
   if (!summary) {
     return null;
   }
+  insertArchivedTurns(
+    indexed.map((turn, index) => Object.assign(turn, { embedding: embeddings[index] })),
+  );
   const conversationId = insertConversation(summary, await embedOne(summary, "document"));
   assignConversation(
     messages.map((message) => message.id),

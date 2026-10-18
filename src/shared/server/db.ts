@@ -36,6 +36,18 @@ db.exec(`
     created_at TEXT NOT NULL,
     embedding BLOB NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS archived_turns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    embedding BLOB NOT NULL
+  );
+  CREATE VIRTUAL TABLE IF NOT EXISTS archived_turns_fts USING fts5(
+    content,
+    content = 'archived_turns',
+    content_rowid = 'id',
+    tokenize = 'unicode61 remove_diacritics 2'
+  );
   CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
     role TEXT NOT NULL,
@@ -148,6 +160,50 @@ export function insertConversation(content: string, embedding: Float32Array) {
   return String(result.lastInsertRowid);
 }
 
+export function insertArchivedTurns(
+  turns: { content: string; createdAt: string; embedding: Float32Array }[],
+) {
+  const insert = db.prepare(
+    "INSERT INTO archived_turns (content, created_at, embedding) VALUES (?, ?, ?)",
+  );
+  const index = db.prepare(
+    "INSERT INTO archived_turns_fts (rowid, content) VALUES (?, ?)",
+  );
+  for (const turn of turns) {
+    const { lastInsertRowid } = insert.run(
+      turn.content,
+      turn.createdAt,
+      toBlob(turn.embedding),
+    );
+    index.run(lastInsertRowid, turn.content);
+  }
+}
+
+export function listArchivedTurnVectors() {
+  return db
+    .prepare("SELECT id, content, created_at, embedding FROM archived_turns")
+    .all()
+    .map((row) => ({
+      turn: conversationRow.parse(row),
+      embedding: fromBlob(vectorRow.parse(row).embedding),
+    }));
+}
+
+export function searchArchivedTurns(query: string, limit: number) {
+  const words = query.match(/[\p{L}\p{N}]+/gu);
+  if (!words) {
+    return [];
+  }
+  return db
+    .prepare(
+      `SELECT archived_turns.id, archived_turns.content, archived_turns.created_at
+       FROM archived_turns_fts JOIN archived_turns ON archived_turns.id = archived_turns_fts.rowid
+       WHERE archived_turns_fts MATCH ? ORDER BY bm25(archived_turns_fts) LIMIT ?`,
+    )
+    .all(words.map((word) => `"${word}"`).join(" OR "), limit)
+    .map((row) => conversationRow.parse(row));
+}
+
 export function getMemory(id: string) {
   const row = db.prepare(`SELECT ${MEMORY_COLUMNS} FROM memories WHERE id = ?`).get(id);
   return row ? memoryRow.parse(row) : undefined;
@@ -194,7 +250,7 @@ export function markAccessed(ids: string[]) {
 
 export function resetDatabase() {
   db.exec(
-    "DELETE FROM memories; DELETE FROM conversations; DELETE FROM messages; DELETE FROM settings; DELETE FROM thread_items; DELETE FROM sqlite_sequence;",
+    "DELETE FROM memories; DELETE FROM conversations; DELETE FROM archived_turns; INSERT INTO archived_turns_fts (archived_turns_fts) VALUES ('delete-all'); DELETE FROM messages; DELETE FROM settings; DELETE FROM thread_items; DELETE FROM sqlite_sequence;",
   );
 }
 

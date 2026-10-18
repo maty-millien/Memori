@@ -17,9 +17,10 @@ import {
   userContent,
   wrap,
 } from "@/features/memories/server/prompting";
-import { retrieve } from "@/features/memories/server/retrieval";
+import { recall, retrieve } from "@/features/memories/server/retrieval";
 import {
   CONTEXT_WINDOW,
+  messageText,
   type CallUsage,
   type Conversation,
   type Memory,
@@ -120,15 +121,18 @@ const conversationKey = (conversation: Conversation) => `conversation:${conversa
 
 const FULL_TOOL_OUTPUT_TURNS = 3;
 
+const ELISION_BATCH_TURNS = 5;
+
 function seedItems(history: MemoriUIMessage[]) {
   const replies = history.filter((message) => message.role !== "user");
+  const pending = Math.max(0, replies.length - FULL_TOOL_OUTPUT_TURNS);
+  const elided = pending - (pending % ELISION_BATCH_TURNS);
   return replies.flatMap((message, index) =>
     z
       .array(itemSchema)
       .parse(getThreadItems(message.id) ?? [])
       .map((item) =>
-        item.type === "function_call_output" &&
-        index < replies.length - FULL_TOOL_OUTPUT_TURNS
+        item.type === "function_call_output" && index < elided
           ? Object.assign(item, {
               output: `[Output${typeof item.output === "string" ? ` (${item.output.split("\n").length} lines)` : ""} elided to save context. Rerun the tool if you need it again.]`,
             })
@@ -164,10 +168,8 @@ export function chatResponse(messageId: string, userText: string) {
       await postTurn;
       const history = listLiveMessages();
       const inbox: string[] = [];
-      const steers: string[] = [];
       turn.steer = (text) => {
         inbox.push(text);
-        steers.push(text);
         writer.write({ type: "data-steer", data: { text } });
       };
       const drain = () =>
@@ -183,9 +185,24 @@ export function chatResponse(messageId: string, userText: string) {
       const images =
         models.find((model) => model.id === chatSettings.model)?.images ?? false;
       const body = userContent(userMessage);
+      const retrievalQuery = [
+        ...history.slice(-2).map((message) => messageText(message.parts).slice(-500)),
+        body,
+      ].join("\n\n");
+      const removed = (history.at(-1)?.parts ?? []).flatMap((part) =>
+        part.type === "data-curation"
+          ? part.data.operations.flatMap((operation) =>
+              operation.action === "delete" &&
+              operation.memory_id &&
+              operation.result.startsWith("deleted")
+                ? [operation.memory_id]
+                : [],
+            )
+          : [],
+      );
       const retrievalStarted = performance.now();
       const { live, ...retrieval } = retrieve(
-        await embedOne(body, "query"),
+        await embedOne(retrievalQuery, "query"),
         history[0]?.metadata?.createdAt,
       );
       const retrievalMs = Math.round(performance.now() - retrievalStarted);
@@ -203,15 +220,15 @@ export function chatResponse(messageId: string, userText: string) {
       );
       const unseen = <T>(entries: T[], key: (entry: T) => string) =>
         entries.filter((entry) => !seen.has(key(entry)));
-      const current = timestampedUserContent(body, createdAt);
       const prompt = buildContextPrompt(
-        current,
+        timestampedUserContent(body, createdAt),
         unseen(
           retrieval.memories.map((item) => item.memory),
           memoryKey,
         ),
         unseen(retrieval.recent, conversationKey),
         unseen(retrieval.similar, conversationKey),
+        removed,
       );
       writer.write({ type: "data-retrieval", data: retrieval });
       writer.write({ type: "data-prompt", data: { prompt } });
@@ -319,6 +336,40 @@ export function chatResponse(messageId: string, userText: string) {
           writer.write({ type: "data-read", id: callId, data: { path, running: false } });
           since = performance.now();
           return result;
+        },
+      };
+      const recallTool: Tool = {
+        definition: {
+          type: "function",
+          name: "recall",
+          description:
+            "Search the earlier parts of this conversation that are no longer in the chat history. Returns the most relevant past exchanges, each with its date. Matches both meaning and exact words, so include specific names, paths, or numbers when you know them.",
+          strict: true,
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "What to look for" },
+            },
+            required: ["query"],
+            additionalProperties: false,
+          },
+        },
+        run: async (args, callId) => {
+          const { query } = z.object({ query: z.string() }).parse(JSON.parse(args));
+          thought();
+          writer.write({
+            type: "data-recall",
+            id: callId,
+            data: { query, running: true },
+          });
+          const turns = await recall(query);
+          writer.write({
+            type: "data-recall",
+            id: callId,
+            data: { query, running: false },
+          });
+          since = performance.now();
+          return turns.join("\n\n") || "No earlier exchanges match.";
         },
       };
       const patchTool: Tool = {
@@ -454,7 +505,7 @@ export function chatResponse(messageId: string, userText: string) {
           input: [...seedItems(history), userItem],
           model: chatSettings.model,
           effort: chatSettings.effort,
-          tools: [shellTool, readTool, patchTool, questionTool],
+          tools: [shellTool, readTool, recallTool, patchTool, questionTool],
           webSearch: true,
           steer: drain,
           signal,
@@ -554,25 +605,6 @@ export function chatResponse(messageId: string, userText: string) {
         ms: Math.round(performance.now() - chatStarted),
       };
 
-      const curationPrompt = [
-        wrap(
-          "relevant_memories",
-          formatMemories([...retrieval.memories.map((item) => item.memory), ...live]) ||
-            "(none)",
-        ),
-        wrap(
-          "recent_history",
-          transcript(history.slice(-SETTINGS.curationHistoryMessages)) || "(none)",
-        ),
-        wrap(
-          "latest_turn",
-          [
-            `user: ${current}`,
-            ...steers.map((text) => `user (while the assistant was working): ${text}`),
-            `assistant: ${reply.text}`,
-          ].join("\n"),
-        ),
-      ].join("\n\n");
       writer.write({
         type: "data-usage",
         data: {
@@ -589,6 +621,18 @@ export function chatResponse(messageId: string, userText: string) {
       finishTurn = async (message) => {
         const parts: MemoriUIMessage["parts"] = [];
         let curationUsage: CallUsage | null = null;
+        const curationPrompt = [
+          wrap(
+            "relevant_memories",
+            formatMemories([...retrieval.memories.map((item) => item.memory), ...live]) ||
+              "(none)",
+          ),
+          wrap(
+            "recent_history",
+            transcript(history.slice(-SETTINGS.curationHistoryMessages)) || "(none)",
+          ),
+          wrap("latest_turn", transcript([userMessage, message])),
+        ].join("\n\n");
         try {
           const curation = await curate(curationPrompt);
           curationUsage = curation.usage;
