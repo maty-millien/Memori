@@ -103,11 +103,9 @@ export function MemoriesDialog({
         </DialogHeader>
         <Tabs defaultValue="memories" className="min-h-0 min-w-0 flex-1">
           <TabsList>
-            <TabsTrigger value="memories">
-              Memories <Badge variant="secondary">{memories.length}</Badge>
-            </TabsTrigger>
+            <TabsTrigger value="memories">Memories ・{memories.length}</TabsTrigger>
             <TabsTrigger value="conversations">
-              Episodes <Badge variant="secondary">{conversations.length}</Badge>
+              Episodes ・{conversations.length}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="memories" className="min-h-0 overflow-y-auto">
