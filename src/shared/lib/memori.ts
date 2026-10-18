@@ -93,6 +93,8 @@ type MemoriData = {
   read: { path: string; running: boolean };
   patch: { patch: string; running: boolean; output: string };
   question: { questions: Question[]; answers: string[][] | null };
+  steer: { text: string };
+  stopped: Record<string, never>;
   curation: { prompt: string; operations: MemoryOperation[] };
   compaction: { episodeId: string; summary: string; messageCount: number };
   usage: {

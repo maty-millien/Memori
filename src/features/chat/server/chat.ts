@@ -55,9 +55,23 @@ let activeTurn: {
   userMessage: MemoriUIMessage;
   chunks: Chunk[];
   followers: Set<ReadableStreamDefaultController<Chunk>>;
+  controller: AbortController;
+  steer: ((text: string) => void) | null;
 } | null = null;
 
 export const activeUserMessage = () => activeTurn?.userMessage;
+
+export function stopTurn() {
+  activeTurn?.controller.abort();
+}
+
+export function steerTurn(text: string) {
+  if (!activeTurn?.steer) {
+    return false;
+  }
+  activeTurn.steer(text);
+  return true;
+}
 
 const questionSchema = z.object({
   question: z.string(),
@@ -106,22 +120,46 @@ function seedItems(history: MemoriUIMessage[]) {
   );
 }
 
-export function chatResponse(messageId: string, text: string) {
+export function chatResponse(messageId: string, userText: string) {
   const history = listLiveMessages();
   const createdAt = new Date();
   const userMessage: MemoriUIMessage = {
     id: messageId,
     role: "user",
-    parts: [{ type: "text", text }],
+    parts: [{ type: "text", text: userText }],
     metadata: { createdAt: createdAt.toISOString() },
   };
   let items: Item[] | null = null;
+  const turn: NonNullable<typeof activeTurn> = {
+    userMessage,
+    chunks: [],
+    followers: new Set(),
+    controller: new AbortController(),
+    steer: null,
+  };
+  activeTurn = turn;
+  const { signal } = turn.controller;
 
   const stream = createUIMessageStream<MemoriUIMessage>({
     originalMessages: [...history, userMessage],
     onError: errorMessage,
     execute: async ({ writer }) => {
       writer.write({ type: "start" });
+      const inbox: string[] = [];
+      const steers: string[] = [];
+      turn.steer = (text) => {
+        inbox.push(text);
+        steers.push(text);
+        writer.write({ type: "data-steer", data: { text } });
+      };
+      const drain = () =>
+        inbox.splice(0).map((text): Item => ({
+          type: "message",
+          role: "user",
+          content: [
+            { type: "input_text", text: timestampedUserContent(text, new Date()) },
+          ],
+        }));
 
       const { models, settings: chatSettings } = await chatOptions();
       const images =
@@ -209,7 +247,7 @@ export function chatResponse(messageId: string, text: string) {
           const data = { command, running: true, exitCode: null, output: "" };
           thought();
           writer.write({ type: "data-command", id: callId, data });
-          const result = await shell(command, workdir, timeout);
+          const result = await shell(command, workdir, timeout, signal);
           writer.write({
             type: "data-command",
             id: callId,
@@ -367,9 +405,12 @@ export function chatResponse(messageId: string, text: string) {
             id: callId,
             data: { questions, answers: null },
           });
-          const answers = await new Promise<string[][]>((resolve) =>
-            pendingQuestions.set(callId, resolve),
-          );
+          const answers = await new Promise<string[][]>((resolve) => {
+            pendingQuestions.set(callId, resolve);
+            signal.addEventListener("abort", () => resolve(questions.map(() => [])), {
+              once: true,
+            });
+          });
           pendingQuestions.delete(callId);
           writer.write({
             type: "data-question",
@@ -386,72 +427,104 @@ export function chatResponse(messageId: string, text: string) {
           return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`;
         },
       };
-      const reply = await runAgent({
-        instructions: CHAT_PROMPT,
-        input: [...seedItems(history), userItem],
-        model: chatSettings.model,
-        effort: chatSettings.effort,
-        tools: [shellTool, readTool, patchTool, questionTool],
-        webSearch: true,
-        onEvent: (event) => {
-          if (event.type === "response.output_text.delta" && event.item_id) {
-            writer.write({
-              type: "text-delta",
-              id: event.item_id,
-              delta: event.delta ?? "",
-            });
-            return;
-          }
-          const output = event.item;
-          if (
-            !output ||
-            (event.type !== "response.output_item.added" &&
-              event.type !== "response.output_item.done")
-          ) {
-            return;
-          }
-          const id = output.id ?? "";
-          const done = event.type === "response.output_item.done";
-          switch (output.type) {
-            case "reasoning": {
-              const summary = (output.summary ?? []).map((part) => part.text);
-              if (done && summary.length > 0) {
-                writer.write({ type: "reasoning-start", id });
-                writer.write({
-                  type: "reasoning-delta",
-                  id,
-                  delta: summary.join("\n\n"),
-                });
-                writer.write({ type: "reasoning-end", id });
-              }
-              break;
-            }
-            case "message":
-              if (done) {
-                writer.write({ type: "text-end", id });
-                since = performance.now();
-              } else {
-                thought();
-                writer.write({ type: "text-start", id });
-              }
-              break;
-            case "web_search_call": {
-              thought();
+      const threadItems: Item[] = [];
+      const reply = await runAgent(
+        {
+          instructions: CHAT_PROMPT,
+          input: [...seedItems(history), userItem],
+          model: chatSettings.model,
+          effort: chatSettings.effort,
+          tools: [shellTool, readTool, patchTool, questionTool],
+          webSearch: true,
+          steer: drain,
+          signal,
+          onEvent: (event) => {
+            if (event.type === "response.output_text.delta" && event.item_id) {
               writer.write({
-                type: "data-search",
-                id,
-                data: { query: output.action?.query ?? "", running: !done },
+                type: "text-delta",
+                id: event.item_id,
+                delta: event.delta ?? "",
               });
-              if (done) {
-                since = performance.now();
-              }
-              break;
+              return;
             }
-            default:
-              break;
-          }
+            const output = event.item;
+            if (
+              !output ||
+              (event.type !== "response.output_item.added" &&
+                event.type !== "response.output_item.done")
+            ) {
+              return;
+            }
+            const id = output.id ?? "";
+            const done = event.type === "response.output_item.done";
+            switch (output.type) {
+              case "reasoning": {
+                const summary = (output.summary ?? []).map((part) => part.text);
+                if (done && summary.length > 0) {
+                  writer.write({ type: "reasoning-start", id });
+                  writer.write({
+                    type: "reasoning-delta",
+                    id,
+                    delta: summary.join("\n\n"),
+                  });
+                  writer.write({ type: "reasoning-end", id });
+                }
+                break;
+              }
+              case "message":
+                if (done) {
+                  writer.write({ type: "text-end", id });
+                  since = performance.now();
+                } else {
+                  thought();
+                  writer.write({ type: "text-start", id });
+                }
+                break;
+              case "web_search_call": {
+                thought();
+                writer.write({
+                  type: "data-search",
+                  id,
+                  data: { query: output.action?.query ?? "", running: !done },
+                });
+                if (done) {
+                  since = performance.now();
+                }
+                break;
+              }
+              default:
+                break;
+            }
+          },
         },
+        threadItems,
+      ).catch((error: unknown) => {
+        if (!signal.aborted) {
+          throw error;
+        }
+        return null;
       });
+      turn.steer = null;
+      if (!reply) {
+        writer.write({ type: "data-stopped", data: {} });
+        writer.write({ type: "finish" });
+        items = [
+          userItem,
+          ...threadItems,
+          ...drain(),
+          {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "[The user stopped your previous response before it finished.]",
+              },
+            ],
+          },
+        ];
+        return;
+      }
       const chatUsage = {
         ...reply.usage,
         ms: Math.round(performance.now() - chatStarted),
@@ -467,7 +540,14 @@ export function chatResponse(messageId: string, text: string) {
           "recent_history",
           transcript(history.slice(-SETTINGS.curationHistoryMessages)) || "(none)",
         ),
-        wrap("latest_turn", `user: ${current}\nassistant: ${reply.text}`),
+        wrap(
+          "latest_turn",
+          [
+            `user: ${current}`,
+            ...steers.map((text) => `user (while the assistant was working): ${text}`),
+            `assistant: ${reply.text}`,
+          ].join("\n"),
+        ),
       ].join("\n\n");
       let curationUsage: CallUsage | null = null;
       try {
@@ -520,12 +600,6 @@ export function chatResponse(messageId: string, text: string) {
     },
   });
 
-  const turn = {
-    userMessage,
-    chunks: [] as Chunk[],
-    followers: new Set<ReadableStreamDefaultController<Chunk>>(),
-  };
-  activeTurn = turn;
   void (async () => {
     for await (const chunk of stream) {
       turn.chunks.push(chunk);

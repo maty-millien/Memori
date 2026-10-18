@@ -72,6 +72,9 @@ function assistantLines(message: MemoriUIMessage) {
     if (part.type === "data-command") {
       return [`assistant ran: ${part.data.command}`];
     }
+    if (part.type === "data-steer") {
+      return [`user (while the assistant was working): ${part.data.text}`];
+    }
     if (part.type === "data-patch") {
       return [`assistant edited files: ${part.data.output}`];
     }

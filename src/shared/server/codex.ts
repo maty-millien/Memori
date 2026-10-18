@@ -112,7 +112,12 @@ async function credentials() {
 
 async function codexFetch(
   path: string,
-  init: { method?: string; headers?: Record<string, string>; body?: string } = {},
+  init: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+    signal?: AbortSignal;
+  } = {},
 ) {
   const tokens = await credentials();
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -167,9 +172,10 @@ export async function chatOptions() {
   return { models, settings };
 }
 
-async function* respond(body: object) {
+async function* respond(body: object, signal?: AbortSignal) {
   const response = await codexFetch("/responses", {
     method: "POST",
+    signal,
     headers: { "OpenAI-Beta": "responses=experimental", Accept: "text/event-stream" },
     body: JSON.stringify(body),
   });
@@ -200,6 +206,8 @@ type AgentOptions = {
   webSearch?: boolean;
   schema?: unknown;
   onEvent?: (event: StreamEvent) => void;
+  steer?: () => Item[];
+  signal?: AbortSignal;
 };
 
 export async function runAgent(
@@ -212,6 +220,8 @@ export async function runAgent(
     webSearch = false,
     schema,
     onEvent,
+    steer,
+    signal,
   }: AgentOptions,
   items: Item[] = [],
   usage: TokenUsage = {
@@ -223,25 +233,28 @@ export async function runAgent(
 ): Promise<{ text: string; usage: TokenUsage; context: number; items: Item[] }> {
   const output: Item[] = [];
   let context = 0;
-  for await (const event of respond({
-    model,
-    instructions,
-    input: [...input, ...items],
-    tools: [
-      ...(webSearch ? [{ type: "web_search" }] : []),
-      ...tools.map((tool) => tool.definition),
-    ],
-    tool_choice: "auto",
-    parallel_tool_calls: false,
-    reasoning: { effort, summary: "auto" },
-    include: ["reasoning.encrypted_content"],
-    text: schema
-      ? { format: { type: "json_schema", name: "output", strict: true, schema } }
-      : undefined,
-    prompt_cache_key: "memori",
-    store: false,
-    stream: true,
-  })) {
+  for await (const event of respond(
+    {
+      model,
+      instructions,
+      input: [...input, ...items],
+      tools: [
+        ...(webSearch ? [{ type: "web_search" }] : []),
+        ...tools.map((tool) => tool.definition),
+      ],
+      tool_choice: "auto",
+      parallel_tool_calls: false,
+      reasoning: { effort, summary: "auto" },
+      include: ["reasoning.encrypted_content"],
+      text: schema
+        ? { format: { type: "json_schema", name: "output", strict: true, schema } }
+        : undefined,
+      prompt_cache_key: "memori",
+      store: false,
+      stream: true,
+    },
+    signal,
+  )) {
     if (event.type === "response.output_item.done" && event.item) {
       output.push(event.item);
     }
@@ -262,11 +275,6 @@ export async function runAgent(
   }
   items.push(...output);
   const calls = output.filter((entry) => entry.type === "function_call");
-  if (calls.length === 0) {
-    const reply = output.findLast((entry) => entry.type === "message");
-    const text = (reply?.content ?? []).map((part) => part.text ?? "").join("");
-    return { text, usage, context, items };
-  }
   items.push(
     ...(await Promise.all(
       calls.map(async (call) => {
@@ -281,8 +289,27 @@ export async function runAgent(
       }),
     )),
   );
+  const steered = steer?.() ?? [];
+  if (calls.length === 0 && steered.length === 0) {
+    const reply = output.findLast((entry) => entry.type === "message");
+    const text = (reply?.content ?? []).map((part) => part.text ?? "").join("");
+    return { text, usage, context, items };
+  }
+  items.push(...steered);
+  signal?.throwIfAborted();
   return runAgent(
-    { instructions, input, model, effort, tools, webSearch, schema, onEvent },
+    {
+      instructions,
+      input,
+      model,
+      effort,
+      tools,
+      webSearch,
+      schema,
+      onEvent,
+      steer,
+      signal,
+    },
     items,
     usage,
   );

@@ -1,9 +1,8 @@
-import { IconArrowUp } from "@tabler/icons-react";
+import { IconArrowUp, IconPlayerStopFilled } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { ChatModel, ChatSettings } from "@/shared/lib/memori";
 import { Button } from "@/shared/ui/button";
-import { Spinner } from "@/shared/ui/spinner";
 
 import { ContextRing } from "./context-ring";
 import { ModelMenu } from "./model-menu";
@@ -15,6 +14,7 @@ export function Composer({
   chatSettings,
   onChatSettingsChange,
   onSend,
+  onStop,
 }: {
   busy: boolean;
   contextTokens: number;
@@ -22,6 +22,7 @@ export function Composer({
   chatSettings: ChatSettings;
   onChatSettingsChange: (settings: ChatSettings) => void;
   onSend: (text: string) => void;
+  onStop: () => void;
 }) {
   const [value, setValue] = useState("");
   const form = useRef<HTMLFormElement>(null);
@@ -44,7 +45,7 @@ export function Composer({
   }, []);
 
   function submit() {
-    if (empty || busy) {
+    if (empty) {
       return;
     }
     onSend(value.trim());
@@ -88,10 +89,17 @@ export function Composer({
         </div>
         <div className="flex items-center gap-2">
           <ContextRing tokens={contextTokens} />
-          <Button type="submit" className="size-9 rounded-full" disabled={busy || empty}>
-            {busy ? <Spinner /> : <IconArrowUp className="size-4" />}
-            <span className="sr-only">Send</span>
-          </Button>
+          {busy && empty ? (
+            <Button type="button" className="size-9 rounded-full" onClick={onStop}>
+              <IconPlayerStopFilled className="size-4" />
+              <span className="sr-only">Stop</span>
+            </Button>
+          ) : (
+            <Button type="submit" className="size-9 rounded-full" disabled={empty}>
+              <IconArrowUp className="size-4" />
+              <span className="sr-only">Send</span>
+            </Button>
+          )}
         </div>
       </div>
     </form>

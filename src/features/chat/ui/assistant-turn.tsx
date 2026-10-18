@@ -6,6 +6,7 @@ import {
   IconFile,
   IconFileDiff,
   IconMessageQuestion,
+  IconPlayerStopFilled,
   IconTerminal2,
   IconWorldSearch,
 } from "@tabler/icons-react";
@@ -250,6 +251,14 @@ function TimelinePart({ part }: { part: Part }) {
       ) : (
         <QuestionCard id={part.id ?? ""} questions={part.data.questions} />
       );
+    case "data-steer":
+      return (
+        <Bubble variant="secondary" align="end" className="max-w-[70%] self-end">
+          <BubbleContent className="whitespace-pre-wrap">{part.data.text}</BubbleContent>
+        </Bubble>
+      );
+    case "data-stopped":
+      return <Step icon={<IconPlayerStopFilled />}>Stopped</Step>;
     case "data-read":
       return (
         <ToolStep

@@ -2,9 +2,9 @@ import { Chat, useChat } from "@ai-sdk/react";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { useRouter, type AnyRouter } from "@tanstack/react-router";
 import { DefaultChatTransport } from "ai";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { saveChatSettings } from "@/features/chat/server/functions";
+import { saveChatSettings, steerChat, stopChat } from "@/features/chat/server/functions";
 import type { ChatModel, ChatSettings, MemoriUIMessage } from "@/shared/lib/memori";
 import { PageHeader } from "@/shared/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
@@ -70,6 +70,13 @@ export function ChatPage({
   const [chat] = useState(() => getChat(initialMessages, router));
   const { messages, sendMessage, status, error } = useChat({ chat, resume: true });
   const busy = status === "submitted" || status === "streaming";
+  const queued = useRef<string[]>([]);
+
+  useEffect(() => {
+    if (!busy && queued.current.length > 0) {
+      void sendMessage({ text: queued.current.splice(0).join("\n\n") });
+    }
+  }, [busy, sendMessage]);
   const lastId = messages.at(-1)?.id;
 
   const composer = (
@@ -90,7 +97,23 @@ export function ChatPage({
           setChatSettings(settings);
           void saveChatSettings({ data: settings });
         }}
-        onSend={(text) => void sendMessage({ text })}
+        onSend={(text) => {
+          if (!busy) {
+            void sendMessage({ text });
+            return;
+          }
+          void steerChat({ data: { text } }).then((accepted) => {
+            if (accepted) {
+              return;
+            }
+            if (chat.status === "ready" || chat.status === "error") {
+              void sendMessage({ text });
+            } else {
+              queued.current.push(text);
+            }
+          });
+        }}
+        onStop={() => void stopChat()}
       />
     </div>
   );

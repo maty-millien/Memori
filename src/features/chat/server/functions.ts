@@ -4,7 +4,7 @@ import { z } from "zod";
 import { chatOptions } from "@/shared/server/codex";
 import { listMessages, setChatSettings } from "@/shared/server/db";
 
-import { activeUserMessage, answerQuestion } from "./chat";
+import { activeUserMessage, answerQuestion, steerTurn, stopTurn } from "./chat";
 
 export const getMessages = createServerFn({ strict: { output: false } }).handler(() => {
   const userMessage = activeUserMessage();
@@ -24,3 +24,11 @@ export const sendAnswers = createServerFn({ method: "POST" })
   .handler(({ data }) => {
     answerQuestion(data.id, data.answers);
   });
+
+export const stopChat = createServerFn({ method: "POST" }).handler(() => {
+  stopTurn();
+});
+
+export const steerChat = createServerFn({ method: "POST" })
+  .validator(z.object({ text: z.string().min(1) }))
+  .handler(({ data }) => steerTurn(data.text));

@@ -26,7 +26,12 @@ type ShellResult = { output: string; exitCode: number | null };
 const homePath = (path: string) =>
   resolve(homedir(), path.replace(/^~(?=$|\/)/, homedir()));
 
-export function shell(command: string, workdir: string | null, timeout: number | null) {
+export function shell(
+  command: string,
+  workdir: string | null,
+  timeout: number | null,
+  signal: AbortSignal,
+) {
   const cwd = homePath(workdir ?? ".");
   if (!statSync(cwd, { throwIfNoEntry: false })?.isDirectory()) {
     return Promise.resolve<ShellResult>({
@@ -45,22 +50,23 @@ export function shell(command: string, workdir: string | null, timeout: number |
     const chunks: Buffer[] = [];
     child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => chunks.push(chunk));
-    const kill = (signal: NodeJS.Signals) => {
+    const kill = (killSignal: NodeJS.Signals) => {
       try {
-        process.kill(-child.pid!, signal);
+        process.kill(-child.pid!, killSignal);
       } catch {}
     };
-    let timedOut = false;
-    const timer =
-      ms > 0
-        ? setTimeout(() => {
-            timedOut = true;
-            kill("SIGTERM");
-            setTimeout(() => kill("SIGKILL"), 3_000).unref();
-          }, ms)
-        : undefined;
-    child.on("close", (exitCode, signal) => {
+    let ended: "timeout" | "stopped" | null = null;
+    const end = (reason: "timeout" | "stopped") => {
+      ended = reason;
+      kill("SIGTERM");
+      setTimeout(() => kill("SIGKILL"), 3_000).unref();
+    };
+    const timer = ms > 0 ? setTimeout(() => end("timeout"), ms) : undefined;
+    const stop = () => end("stopped");
+    signal.addEventListener("abort", stop, { once: true });
+    child.on("close", (exitCode, killedBy) => {
       clearTimeout(timer);
+      signal.removeEventListener("abort", stop);
       const text = Buffer.concat(chunks).toString("utf8");
       const lines = text.replace(/\n$/, "").split("\n");
       let shown = lines.slice(-SHELL_MAX_LINES).join("\n");
@@ -75,13 +81,16 @@ export function shell(command: string, workdir: string | null, timeout: number |
         const count = shown.split("\n").length;
         body += `\n\n[showing lines ${lines.length - count + 1}-${lines.length} of ${lines.length}; full output saved to ${file}]`;
       }
-      const status = timedOut
-        ? `Command exceeded timeout of ${ms} ms. Retry with a larger timeout if the command is expected to take longer.`
-        : signal
-          ? `Killed by ${signal}`
-          : exitCode !== 0
-            ? `Exited with code ${exitCode}`
-            : "";
+      const status =
+        ended === "timeout"
+          ? `Command exceeded timeout of ${ms} ms. Retry with a larger timeout if the command is expected to take longer.`
+          : ended === "stopped"
+            ? "Stopped by the user"
+            : killedBy
+              ? `Killed by ${killedBy}`
+              : exitCode !== 0
+                ? `Exited with code ${exitCode}`
+                : "";
       done({ output: [body, status].filter(Boolean).join("\n\n"), exitCode });
     });
   });
