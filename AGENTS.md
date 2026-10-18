@@ -14,10 +14,10 @@ Memori is a local research app for long-term agent memory. There is a single end
 
 - `src/routes/`: TanStack Start file routes. Keep them thin: a loader, the page component, and API handlers that validate input and call feature code.
 - `src/features/chat/`: the chat page (`ui/`) and the agent turn (`server/`).
-- `src/features/memories/`: the memories page (`ui/`) and the memory pipeline (`server/`): retrieval, curation, episodes, embeddings, prompt formatting, and ranking settings in `config.ts`.
+- `src/features/memories/`: the memories dialog (`ui/`) and the memory pipeline (`server/`): retrieval, curation, episodes, embeddings, prompt formatting, and ranking settings in `config.ts`.
 - `src/shared/`: code used by both features only. `ui/` holds shadcn components, `lib/` holds types and helpers that run in the browser and on the server, `server/` holds the database, the Codex client, and uploads.
 
-Dependencies point one way: routes -> features -> shared. `features/chat` may import `features/memories`, never the reverse. The one exception is `shared/page-header.tsx`, which calls the memories server functions; don't add more.
+Dependencies point one way: routes -> features -> shared. `features/chat` may import `features/memories`, never the reverse.
 
 Browser code reaches server code (`server/` folders, `node:` imports) only through the `createServerFn` exports in `functions.ts` files or through route `server.handlers`. `ui/` files never import any other server module.
 

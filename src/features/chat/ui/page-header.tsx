@@ -1,14 +1,10 @@
-import {
-  IconBrain,
-  IconMenu2,
-  IconMessageCircle,
-  IconStack2,
-  IconTrash,
-} from "@tabler/icons-react";
-import { Link, useRouter } from "@tanstack/react-router";
+import { IconBrain, IconMenu2, IconStack2, IconTrash } from "@tabler/icons-react";
+import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { resetEverything, triggerEpisode } from "@/features/memories/server/functions";
+import { MemoriesDialog } from "@/features/memories/ui/memories-dialog";
+import type { Memory } from "@/shared/lib/memori";
 import { cn } from "@/shared/lib/utils";
 import {
   AlertDialog,
@@ -36,19 +32,23 @@ const STRANDS = [
   "M67.7 47.3 L66.6 47.2 L65.6 47.2 L64.5 47.2 L63.5 47.2 L62.4 47.2 L61.4 47.2 L60.3 47.3 L59.3 47.4 L58.2 47.5 L57.1 47.6 L56.1 47.7 L55.1 47.8 L54 48 L53 48.2 L52 48.4 L51 48.6 L50 48.8 L49 49.1 L48 49.4 L47 49.7 L46 50 L45 50.3 L44.1 50.6 L43.1 51 L42.2 51.4 L41.3 51.7 L40.4 52.1 L39.5 52.6 L38.6 53 L37.7 53.4 L36.8 53.9 L36 54.4 L35.2 54.9 L34.4 55.4 L33.5 55.9 L32.8 56.4 L32 56.9 L31.3 57.5 L30.5 58 L29.8 58.6 L29.1 59.2 L28.4 59.8 L27.8 60.4 L27.1 61 L26.5 61.6 L25.9 62.3 L25.4 62.9 L24.8 63.5 L24.3 64.2 L23.7 64.9 L23.2 65.5 L22.8 66.2 L22.3 66.9 L21.9 67.6 L21.5 68.2 L21.1 68.9 L20.7 69.6 L20.4 70.3 L20 71 L19.7 71.7 L19.5 72.4 L19.2 73.1 L19 73.8 L18.8 74.5 L18.6 75.2 L18.4 75.9 L18.3 76.6 L18.2 77.3 L18.1 78 L18 78.7 L18 79.3 L17.9 80 L17.9 80.7 L18 81.4 L18 82 L18.1 82.7 L18.2 83.3 L18.3 84 L18.4 84.6 L18.6 85.2 L18.8 85.9 L19 86.5 L19.2 87.1 L19.4 87.7 L19.7 88.2 L20 88.8 L20.3 89.3 L20.6 89.9 L21 90.4 L21.4 90.9 L21.8 91.4 L22.2 91.9 L22.6 92.4 L23.1 92.9 L23.5 93.3 L24 93.7 L24.5 94.2 L25 94.5 L25.6 94.9 L26.1 95.3 L26.7 95.6 L27.3 96 L27.9 96.3 L28.5 96.6 L29.1 96.9 L29.8 97.1 L30.5 97.4 L31.1 97.6 L31.8 97.8 L32.5 98 L33.2 98.1 L34 98.3 L34.7 98.4 L35.5 98.5 L36.2 98.6 L37 98.7 L37.8 98.7 L38.5 98.7 L39.3 98.7 L40.1 98.7 L40.9 98.7 L41.8 98.6 L42.6 98.5 L43.4 98.4 L44.2 98.3 L45.1 98.1 L45.9 98",
 ];
 
-const LINKS = [
-  { to: "/", label: "Chat", icon: IconMessageCircle },
-  { to: "/memories", label: "Memories", icon: IconBrain },
-] as const;
-
 async function reset() {
   await resetEverything();
   window.location.assign("/");
 }
 
-export function PageHeader({ className }: { className?: string }) {
+export function PageHeader({
+  className,
+  memories,
+  conversations,
+}: {
+  className?: string;
+  memories: Memory[];
+  conversations: Memory[];
+}) {
   const router = useRouter();
   const [summarizing, setSummarizing] = useState(false);
+  const [memoriesOpen, setMemoriesOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
 
   async function newEpisode() {
@@ -65,10 +65,7 @@ export function PageHeader({ className }: { className?: string }) {
     <header
       className={cn("flex h-14 shrink-0 items-center gap-2 px-4 sm:px-6", className)}
     >
-      <Link
-        to="/"
-        className="inline-flex items-center gap-[0.3em] text-xl font-medium tracking-tight"
-      >
+      <div className="inline-flex items-center gap-[0.3em] text-xl font-medium tracking-tight">
         <svg
           viewBox="12.4 8 103.1 96.2"
           fill="none"
@@ -84,7 +81,7 @@ export function PageHeader({ className }: { className?: string }) {
           ))}
         </svg>
         <span className="[text-box:trim-both_cap_alphabetic]">Memori</span>
-      </Link>
+      </div>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
@@ -99,12 +96,10 @@ export function PageHeader({ className }: { className?: string }) {
           <span className="sr-only">Menu</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          {LINKS.map(({ to, label, icon: Icon }) => (
-            <DropdownMenuItem key={to} render={<Link to={to} />}>
-              <Icon />
-              {label}
-            </DropdownMenuItem>
-          ))}
+          <DropdownMenuItem onClick={() => setMemoriesOpen(true)}>
+            <IconBrain />
+            Memories
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             closeOnClick={false}
@@ -120,6 +115,12 @@ export function PageHeader({ className }: { className?: string }) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <MemoriesDialog
+        open={memoriesOpen}
+        onOpenChange={setMemoriesOpen}
+        memories={memories}
+        conversations={conversations}
+      />
       <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

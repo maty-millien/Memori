@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 
 import { formatDate } from "@/shared/lib/format";
 import type { Memory } from "@/shared/lib/memori";
-import { PageHeader } from "@/shared/page-header";
 import { Badge } from "@/shared/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import {
   Empty,
   EmptyDescription,
@@ -84,19 +84,24 @@ function MemoryList({
   );
 }
 
-export function MemoriesPage({
+export function MemoriesDialog({
+  open,
+  onOpenChange,
   memories,
   conversations,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   memories: Memory[];
   conversations: Memory[];
 }) {
   return (
-    <div className="flex min-h-svh flex-col">
-      <PageHeader />
-      <div className="mx-auto w-full max-w-5xl px-6 pt-4 pb-10">
-        <h1 className="mb-6 text-3xl font-medium tracking-tight">Memories</h1>
-        <Tabs defaultValue="memories">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex h-[90svh] flex-col sm:max-w-7xl">
+        <DialogHeader>
+          <DialogTitle>Memories</DialogTitle>
+        </DialogHeader>
+        <Tabs defaultValue="memories" className="min-h-0 min-w-0 flex-1">
           <TabsList>
             <TabsTrigger value="memories">
               Memories <Badge variant="secondary">{memories.length}</Badge>
@@ -105,7 +110,7 @@ export function MemoriesPage({
               Episodes <Badge variant="secondary">{conversations.length}</Badge>
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="memories">
+          <TabsContent value="memories" className="min-h-0 overflow-y-auto">
             <MemoryList
               memories={memories}
               icon={<IconBrain />}
@@ -113,7 +118,7 @@ export function MemoriesPage({
               description="Memories appear here once curation saves something durable."
             />
           </TabsContent>
-          <TabsContent value="conversations">
+          <TabsContent value="conversations" className="min-h-0 overflow-y-auto">
             <MemoryList
               memories={conversations}
               icon={<IconMessages />}
@@ -122,7 +127,7 @@ export function MemoriesPage({
             />
           </TabsContent>
         </Tabs>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

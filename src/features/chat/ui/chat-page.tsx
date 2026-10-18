@@ -5,8 +5,12 @@ import { DefaultChatTransport } from "ai";
 import { useEffect, useRef, useState } from "react";
 
 import { saveChatSettings, steerChat, stopChat } from "@/features/chat/server/functions";
-import type { ChatModel, ChatSettings, MemoriUIMessage } from "@/shared/lib/memori";
-import { PageHeader } from "@/shared/page-header";
+import type {
+  ChatModel,
+  ChatSettings,
+  MemoriUIMessage,
+  Memory,
+} from "@/shared/lib/memori";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import {
   MessageScroller,
@@ -19,6 +23,7 @@ import {
 
 import { AssistantTurn } from "./assistant-turn";
 import { Composer } from "./composer";
+import { PageHeader } from "./page-header";
 import { UserTurn } from "./user-turn";
 
 let browserChat: Chat<MemoriUIMessage> | undefined;
@@ -60,10 +65,14 @@ export function ChatPage({
   initialMessages,
   models,
   initialChatSettings,
+  memories,
+  conversations,
 }: {
   initialMessages: MemoriUIMessage[];
   models: ChatModel[];
   initialChatSettings: ChatSettings;
+  memories: Memory[];
+  conversations: Memory[];
 }) {
   const router = useRouter();
   const [chatSettings, setChatSettings] = useState(initialChatSettings);
@@ -78,6 +87,9 @@ export function ChatPage({
     }
   }, [busy, sendMessage]);
   const lastId = messages.at(-1)?.id;
+  const header = (className?: string) => (
+    <PageHeader className={className} memories={memories} conversations={conversations} />
+  );
 
   const composer = (
     <div className="flex w-full flex-col gap-2 px-2 pb-3 sm:pb-4">
@@ -121,7 +133,7 @@ export function ChatPage({
   if (messages.length === 0 && !busy) {
     return (
       <div className="flex h-svh flex-col">
-        <PageHeader />
+        {header()}
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-end pb-14 md:justify-center">
           <h1 className="mb-6 text-3xl font-medium tracking-tight">
             What's on your mind?
@@ -134,7 +146,7 @@ export function ChatPage({
 
   return (
     <div className="relative flex h-svh flex-col">
-      <PageHeader className="absolute inset-x-0 top-0 z-10" />
+      {header("absolute inset-x-0 top-0 z-10")}
       <MessageScrollerProvider autoScroll>
         <MessageScroller className="flex-1">
           <MessageScrollerViewport className="[--scroll-fade-t-size:--spacing(16)]">
