@@ -23,7 +23,7 @@ flowchart TD
     pickConversations --> dedup
 
     subgraph agent ["3. Agent loop"]
-        input["Static instructions<br/>+ live thread items, old tool outputs elided in batches of 5<br/>+ the new prompt"] --> codex["Codex Responses"]
+        input["Static instructions<br/>+ live thread items, tool outputs included<br/>+ the new prompt"] --> codex["Codex Responses"]
         codex -->|tool call| tools["shell, read, patch, question, web_search"]
         codex -->|tool call| recall["recall: semantic + keyword search, fused by rank"]
         tools --> codex

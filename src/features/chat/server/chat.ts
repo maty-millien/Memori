@@ -120,26 +120,10 @@ const memoryKey = (memory: Memory) => `${memory.id}@${memory.updatedAt}`;
 
 const conversationKey = (conversation: Conversation) => `conversation:${conversation.id}`;
 
-const FULL_TOOL_OUTPUT_TURNS = 3;
-
-const ELISION_BATCH_TURNS = 5;
-
 function seedItems(history: MemoriUIMessage[]) {
-  const replies = history.filter((message) => message.role !== "user");
-  const pending = Math.max(0, replies.length - FULL_TOOL_OUTPUT_TURNS);
-  const elided = pending - (pending % ELISION_BATCH_TURNS);
-  return replies.flatMap((message, index) =>
-    z
-      .array(itemSchema)
-      .parse(getThreadItems(message.id) ?? [])
-      .map((item) =>
-        item.type === "function_call_output" && index < elided
-          ? Object.assign(item, {
-              output: `[Output${typeof item.output === "string" ? ` (${item.output.split("\n").length} lines)` : ""} elided to save context. Rerun the tool if you need it again.]`,
-            })
-          : item,
-      ),
-  );
+  return history
+    .filter((message) => message.role !== "user")
+    .flatMap((message) => z.array(itemSchema).parse(getThreadItems(message.id) ?? []));
 }
 
 export function chatResponse(messageId: string, userText: string) {
