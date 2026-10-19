@@ -65,6 +65,12 @@ export function retrieve(query: Float32Array, liveSince: string | undefined) {
   const live = all.filter(isLive).map(({ memory }) => memory);
   const retrieved = memories
     .map(({ memory, embedding }) => rank(memory, cosine(query, embedding)))
+    .filter(
+      ({ memory, score }) =>
+        memory.scope === "global" ||
+        memory.importance === "identity" ||
+        score.similarity >= SETTINGS.retrievalMinSimilarity,
+    )
     .toSorted((a, b) => b.score.total - a.score.total)
     .slice(0, SETTINGS.retrievalTopK);
   markAccessed(retrieved.map((item) => item.memory.id));
