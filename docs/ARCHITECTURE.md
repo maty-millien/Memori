@@ -15,7 +15,7 @@ flowchart TB
     subgraph retrieval ["<b>1. Retrieval</b>"]
         direction LR
         query["<b>Build the query</b><br/>Tail of the last 2 messages<br/>+ the new message"] --> embedQuery["<b>Embed the query</b>"]
-        embedQuery --> rankMemories["<b>Rank memories</b><br/>meaning 0.7 + importance 0.2 + recency 0.07<br/>+ usage 0.03 + global 0.1<br/>Keep the top 50<br/>skip those updated during the live thread<br/><i>reads memories</i>"]
+        embedQuery --> rankMemories["<b>Rank memories</b><br/>similarity 0.7 + importance 0.2 + recency 0.07<br/>+ usage 0.03 + global 0.1<br/>Keep the top 50<br/>skip those updated during the live thread<br/><i>reads memories</i>"]
         embedQuery --> pickConversations["<b>Pick past conversations</b><br/>10 latest + 10 most relevant summaries<br/><i>reads conversations</i>"]
     end
 
@@ -42,7 +42,7 @@ flowchart TB
 
     subgraph curation ["<b>4. Curation, in the background</b>"]
         direction LR
-        curationInput["<b>Curation input</b><br/>Up to 50 retrieved memories<br/>+ memories from the live thread<br/>+ 3 previous messages<br/>+ the full latest turn"] --> curationCall["<b>Codex call</b><br/>Returns memory operations"]
+        curationInput["<b>Curation input</b><br/>Up to 50 retrieved memories<br/>+ memories from the live thread<br/>+ 2 previous messages<br/>+ the full latest turn"] --> curationCall["<b>Codex call</b><br/>Returns memory operations"]
         curationCall --> operations["<b>Apply operations</b><br/>upsert: create, merge, keep dated history<br/>delete: forget request, merged duplicate"]
         operations --> embedMemory["<b>Embed</b><br/>Each new content<br/><i>writes memories</i>"]
     end
