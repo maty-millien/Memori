@@ -86,8 +86,8 @@ export type MemoryOperation = {
 type MemoriData = {
   retrieval: {
     memories: RetrievedMemory[];
-    recent: Conversation[];
-    similar: Conversation[];
+    latest: Conversation[];
+    relevant: Conversation[];
   };
   prompt: { prompt: string };
   thought: { ms: number };

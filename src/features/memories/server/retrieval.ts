@@ -70,18 +70,18 @@ export function retrieve(query: Float32Array, liveSince: string | undefined) {
   markAccessed(retrieved.map((item) => item.memory.id));
 
   const conversations = listConversationVectors();
-  const recent = conversations
+  const latest = conversations
     .map(({ conversation }) => conversation)
     .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, SETTINGS.recentConversations);
-  const recentIds = new Set(recent.map((conversation) => conversation.id));
-  const similar = nearest(
-    conversations.filter(({ conversation }) => !recentIds.has(conversation.id)),
+    .slice(0, SETTINGS.latestConversations);
+  const latestIds = new Set(latest.map((conversation) => conversation.id));
+  const relevant = nearest(
+    conversations.filter(({ conversation }) => !latestIds.has(conversation.id)),
     query,
-    SETTINGS.similarConversations,
+    SETTINGS.relevantConversations,
   ).map(({ vector }) => vector.conversation);
 
-  return { memories: retrieved, recent, similar, live };
+  return { memories: retrieved, latest, relevant, live };
 }
 
 export async function recall(query: string) {

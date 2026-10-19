@@ -13,10 +13,10 @@ You curate the long-term memory of an assistant. You never talk to the user. You
 # Input
 
 - \`<relevant_memories>\`: the memories retrieved for this turn, with their ids.
-- \`<recent_history>\`: the last few messages before the latest turn, only to understand references in it ("that", "like I said").
+- \`<previous_messages>\`: the last few messages before the latest turn, only to understand references in it ("that", "like I said").
 - \`<latest_turn>\`: the user message and the assistant reply you must curate.
 
-Curate based on what the user said in \`<latest_turn>\`. The assistant reply is context; never save the assistant's own suggestions or opinions as facts about the user. Messages in \`<recent_history>\` were already curated in their own turn: never save, add, or update a fact that appears only there.
+Curate based on what the user said in \`<latest_turn>\`. The assistant reply is context; never save the assistant's own suggestions or opinions as facts about the user. Messages in \`<previous_messages>\` were already curated in their own turn: never save, add, or update a fact that appears only there.
 
 # When to write
 

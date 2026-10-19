@@ -2,9 +2,9 @@ export const SETTINGS = {
   embeddingModel: "voyageai/voyage-4-large",
   embeddingDimensions: 2048,
   retrievalTopK: 50,
-  recentConversations: 10,
-  similarConversations: 10,
-  curationHistoryMessages: 3,
+  latestConversations: 10,
+  relevantConversations: 10,
+  curationPreviousMessages: 3,
   recallTopK: 5,
   recallPoolK: 20,
   importanceWeights: {

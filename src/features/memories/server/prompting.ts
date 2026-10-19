@@ -49,15 +49,15 @@ function formatConversations(conversations: Conversation[]) {
 export function buildContextPrompt(
   content: string,
   memories: Memory[],
-  recent: Conversation[],
-  similar: Conversation[],
+  latest: Conversation[],
+  relevant: Conversation[],
 ) {
   const blocks = [];
-  if (recent.length > 0) {
-    blocks.push(wrap("recent_conversations", formatConversations(recent)));
+  if (latest.length > 0) {
+    blocks.push(wrap("latest_conversations", formatConversations(latest)));
   }
-  if (similar.length > 0) {
-    blocks.push(wrap("similar_conversations", formatConversations(similar)));
+  if (relevant.length > 0) {
+    blocks.push(wrap("relevant_conversations", formatConversations(relevant)));
   }
   if (memories.length > 0) {
     blocks.push(wrap("relevant_memories", formatMemories(memories)));

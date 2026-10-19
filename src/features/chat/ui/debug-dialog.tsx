@@ -187,15 +187,15 @@ function MemoryTable({ memories }: { memories: RetrievedMemory[] }) {
 }
 
 function ConversationTable({
-  recent,
-  similar,
+  latest,
+  relevant,
 }: {
-  recent: Conversation[];
-  similar: Conversation[];
+  latest: Conversation[];
+  relevant: Conversation[];
 }) {
   const conversations = [
-    ...recent.map((conversation) => ({ source: "Recent", conversation })),
-    ...similar.map((conversation) => ({ source: "Similar", conversation })),
+    ...latest.map((conversation) => ({ source: "Latest", conversation })),
+    ...relevant.map((conversation) => ({ source: "Relevant", conversation })),
   ];
   return (
     <Table>
@@ -318,7 +318,7 @@ export function DebugDialog({ message }: { message: MemoriUIMessage }) {
             title="Retrieval"
             summary={[
               `${retrieval.memories.length} memories`,
-              `${retrieval.recent.length + retrieval.similar.length} conversations`,
+              `${retrieval.latest.length + retrieval.relevant.length} conversations`,
               usage ? formatSeconds(usage.retrievalMs) : null,
             ]
               .filter(Boolean)
@@ -327,8 +327,11 @@ export function DebugDialog({ message }: { message: MemoriUIMessage }) {
             {retrieval.memories.length > 0 ? (
               <MemoryTable memories={retrieval.memories} />
             ) : null}
-            {retrieval.recent.length + retrieval.similar.length > 0 ? (
-              <ConversationTable recent={retrieval.recent} similar={retrieval.similar} />
+            {retrieval.latest.length + retrieval.relevant.length > 0 ? (
+              <ConversationTable
+                latest={retrieval.latest}
+                relevant={retrieval.relevant}
+              />
             ) : null}
           </Section>
         ) : null}

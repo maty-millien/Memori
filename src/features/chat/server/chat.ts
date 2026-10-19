@@ -201,7 +201,7 @@ export function chatResponse(messageId: string, userText: string) {
             part.type === "data-retrieval"
               ? [
                   ...part.data.memories.map((item) => memoryKey(item.memory)),
-                  ...[...part.data.recent, ...part.data.similar].map(conversationKey),
+                  ...[...part.data.latest, ...part.data.relevant].map(conversationKey),
                 ]
               : [],
           ),
@@ -215,8 +215,8 @@ export function chatResponse(messageId: string, userText: string) {
           retrieval.memories.map((item) => item.memory),
           memoryKey,
         ),
-        unseen(retrieval.recent, conversationKey),
-        unseen(retrieval.similar, conversationKey),
+        unseen(retrieval.latest, conversationKey),
+        unseen(retrieval.relevant, conversationKey),
       );
       writer.write({ type: "data-retrieval", data: retrieval });
       writer.write({ type: "data-prompt", data: { prompt } });
@@ -616,8 +616,8 @@ export function chatResponse(messageId: string, userText: string) {
               "(none)",
           ),
           wrap(
-            "recent_history",
-            transcript(history.slice(-SETTINGS.curationHistoryMessages)) || "(none)",
+            "previous_messages",
+            transcript(history.slice(-SETTINGS.curationPreviousMessages)) || "(none)",
           ),
           wrap("latest_turn", transcript([userMessage, message])),
         ].join("\n\n");
