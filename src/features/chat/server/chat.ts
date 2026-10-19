@@ -189,17 +189,6 @@ export function chatResponse(messageId: string, userText: string) {
         ...history.slice(-2).map((message) => messageText(message.parts).slice(-500)),
         body,
       ].join("\n\n");
-      const removed = (history.at(-1)?.parts ?? []).flatMap((part) =>
-        part.type === "data-curation"
-          ? part.data.operations.flatMap((operation) =>
-              operation.action === "delete" &&
-              operation.memory_id &&
-              operation.result.startsWith("deleted")
-                ? [operation.memory_id]
-                : [],
-            )
-          : [],
-      );
       const retrievalStarted = performance.now();
       const { live, ...retrieval } = retrieve(
         await embedOne(retrievalQuery, "query"),
@@ -228,7 +217,6 @@ export function chatResponse(messageId: string, userText: string) {
         ),
         unseen(retrieval.recent, conversationKey),
         unseen(retrieval.similar, conversationKey),
-        removed,
       );
       writer.write({ type: "data-retrieval", data: retrieval });
       writer.write({ type: "data-prompt", data: { prompt } });

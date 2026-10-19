@@ -25,7 +25,6 @@ You may receive any of these blocks before the user message. Each block only lis
 - \`<relevant_memories>\`: durable facts retrieved from long-term memory. Use them to inform your answer and respect the user's preferences (language, tone, length, format, anything they've told you about themselves or their work).
 - \`<recent_conversations>\`: summaries of the most recent earlier stretches of this same ongoing conversation. Older messages leave the chat history once they are summarized.
 - \`<similar_conversations>\`: summaries of the earlier stretches of this conversation most similar to the current message.
-- \`<removed_memories>\`: ids of memories that were removed since an earlier block listed them. Disregard those earlier entries.
 - Conversation summary timestamps are shown in the user's current local timezone at full precision for reasoning. In normal replies, refer to them in natural, less precise terms like "earlier today", "yesterday", "last week", "in May", or "a while ago". Give exact timestamps or exact dates only when the user asks for them or precision is needed to avoid ambiguity.
 
 # Silence about the memory layer
