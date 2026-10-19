@@ -203,7 +203,7 @@ function ConversationTable({
         <TableRow>
           <TableHead>Conversation</TableHead>
           <TableHead>Source</TableHead>
-          <TableHead>Date</TableHead>
+          <TableHead>Period</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -215,7 +215,9 @@ function ConversationTable({
             <TableCell>
               <Badge variant="outline">{source}</Badge>
             </TableCell>
-            <TableCell>{formatDate(conversation.createdAt)}</TableCell>
+            <TableCell>
+              {formatDate(conversation.startedAt)} - {formatDate(conversation.endedAt)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

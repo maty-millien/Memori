@@ -52,7 +52,10 @@ export type Memory = {
   accessCount: number;
 };
 
-export type Conversation = Pick<Memory, "id" | "content" | "createdAt">;
+export type Conversation = Pick<Memory, "id" | "content"> & {
+  startedAt: string;
+  endedAt: string;
+};
 
 export type Score = {
   similarity: number;

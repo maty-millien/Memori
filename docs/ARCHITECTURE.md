@@ -16,7 +16,7 @@ flowchart TD
     live --> query
 
     subgraph prompt ["2. Prompt"]
-        dedup["Drop what the live thread has already seen"] --> blocks["latest_conversations<br/>relevant_conversations<br/>relevant_memories<br/>message_metadata<br/>user message"]
+        dedup["Drop what the live thread has already seen"] --> blocks["latest_conversations<br/>relevant_conversations<br/>relevant_memories<br/>user_message with datetime and timezone"]
     end
 
     rankMemories --> dedup

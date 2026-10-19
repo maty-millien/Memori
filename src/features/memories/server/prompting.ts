@@ -24,8 +24,7 @@ export function wrap(tag: string, body: string) {
 }
 
 export function timestampedUserContent(content: string, date: Date) {
-  const metadata = `datetime: ${localIso(date)}\ntimezone: ${timezone()}`;
-  return [wrap("message_metadata", metadata), content].join("\n\n");
+  return `<user_message datetime="${localIso(date)}" timezone="${timezone()}">\n${content}\n</user_message>`;
 }
 
 export function formatMemories(memories: Memory[]) {
@@ -41,7 +40,7 @@ function formatConversations(conversations: Conversation[]) {
   return conversations
     .map(
       (conversation) =>
-        `- [local_datetime: ${localIso(new Date(conversation.createdAt))}; timezone: ${timezone()}] ${conversation.content.replaceAll("\n", "\n  ")}`,
+        `- period: ${localIso(new Date(conversation.startedAt))} to ${localIso(new Date(conversation.endedAt))}\n  summary: ${conversation.content.replaceAll("\n", "\n  ")}`,
     )
     .join("\n");
 }

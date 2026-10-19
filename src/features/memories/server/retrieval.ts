@@ -72,7 +72,7 @@ export function retrieve(query: Float32Array, liveSince: string | undefined) {
   const conversations = listConversationVectors();
   const latest = conversations
     .map(({ conversation }) => conversation)
-    .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .toSorted((a, b) => b.endedAt.localeCompare(a.endedAt))
     .slice(0, SETTINGS.latestConversations);
   const latestIds = new Set(latest.map((conversation) => conversation.id));
   const relevant = nearest(

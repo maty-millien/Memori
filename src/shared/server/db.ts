@@ -88,12 +88,27 @@ const memoryRow = z
   }));
 
 const conversationRow = z
-  .object({ id: z.number(), content: z.string(), created_at: z.string() })
+  .object({
+    id: z.number(),
+    content: z.string(),
+    started_at: z.string(),
+    ended_at: z.string(),
+  })
   .transform((row): Conversation => ({
     id: String(row.id),
     content: row.content,
-    createdAt: row.created_at,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
   }));
+
+const CONVERSATION_QUERY = `SELECT conversations.id, conversations.content, conversations.embedding,
+  MIN(messages.created_at) AS started_at, MAX(messages.created_at) AS ended_at
+  FROM conversations JOIN messages ON messages.conversation_id = conversations.id
+  GROUP BY conversations.id ORDER BY conversations.id`;
+
+const turnRow = z
+  .object({ id: z.number(), content: z.string() })
+  .transform((row) => ({ id: String(row.id), content: row.content }));
 
 const vectorRow = z.object({ embedding: z.instanceof(Uint8Array) });
 
@@ -136,14 +151,14 @@ export function listMemoryVectors() {
 
 export function listConversations() {
   return db
-    .prepare("SELECT id, content, created_at FROM conversations ORDER BY id")
+    .prepare(CONVERSATION_QUERY)
     .all()
     .map((row) => conversationRow.parse(row));
 }
 
 export function listConversationVectors() {
   return db
-    .prepare("SELECT id, content, created_at, embedding FROM conversations")
+    .prepare(CONVERSATION_QUERY)
     .all()
     .map((row) => ({
       conversation: conversationRow.parse(row),
@@ -181,10 +196,10 @@ export function insertArchivedTurns(
 
 export function listArchivedTurnVectors() {
   return db
-    .prepare("SELECT id, content, created_at, embedding FROM archived_turns")
+    .prepare("SELECT id, content, embedding FROM archived_turns")
     .all()
     .map((row) => ({
-      turn: conversationRow.parse(row),
+      turn: turnRow.parse(row),
       embedding: fromBlob(vectorRow.parse(row).embedding),
     }));
 }
@@ -196,12 +211,12 @@ export function searchArchivedTurns(query: string, limit: number) {
   }
   return db
     .prepare(
-      `SELECT archived_turns.id, archived_turns.content, archived_turns.created_at
+      `SELECT archived_turns.id, archived_turns.content
        FROM archived_turns_fts JOIN archived_turns ON archived_turns.id = archived_turns_fts.rowid
        WHERE archived_turns_fts MATCH ? ORDER BY bm25(archived_turns_fts) LIMIT ?`,
     )
     .all(words.map((word) => `"${word}"`).join(" OR "), limit)
-    .map((row) => conversationRow.parse(row));
+    .map((row) => turnRow.parse(row));
 }
 
 export function getMemory(id: string) {

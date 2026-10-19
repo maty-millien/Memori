@@ -66,7 +66,7 @@ function ConversationTable({ conversations }: { conversations: Conversation[] })
         <TableRow>
           <TableHead>ID</TableHead>
           <TableHead>Content</TableHead>
-          <TableHead>Created</TableHead>
+          <TableHead>Period</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -76,7 +76,9 @@ function ConversationTable({ conversations }: { conversations: Conversation[] })
             <TableCell className="min-w-80 whitespace-pre-line">
               {conversation.content}
             </TableCell>
-            <TableCell>{formatDate(conversation.createdAt)}</TableCell>
+            <TableCell>
+              {formatDate(conversation.startedAt)} - {formatDate(conversation.endedAt)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
