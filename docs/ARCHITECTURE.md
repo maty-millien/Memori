@@ -9,64 +9,64 @@ config:
     wrappingWidth: 400
 ---
 flowchart TB
-    start(["User sends a message"]) --> wait["Wait for the previous turn's curation and compaction<br/>then load the live messages<br/><i>reads messages</i>"]
+    start(["<b>User sends a message</b>"]) --> wait["<b>Prepare</b><br/>Wait for the previous turn's curation and compaction<br/>Load the live messages<br/><i>reads messages</i>"]
     wait --> retrieval
 
-    subgraph retrieval ["1. Retrieval"]
+    subgraph retrieval ["<b>1. Retrieval</b>"]
         direction LR
-        query["Query: tail of the last 2 messages<br/>+ the new message"] --> embedQuery["Embed the query"]
-        embedQuery --> rankMemories["Rank all memories<br/>meaning 0.7 + importance 0.2 + recency 0.07<br/>+ usage 0.03 + global 0.1<br/>top 50, skip those updated during the live thread<br/><i>reads memories</i>"]
-        embedQuery --> pickConversations["10 latest + 10 most relevant<br/>past conversation summaries<br/><i>reads conversations</i>"]
+        query["<b>Build the query</b><br/>Tail of the last 2 messages<br/>+ the new message"] --> embedQuery["<b>Embed the query</b>"]
+        embedQuery --> rankMemories["<b>Rank memories</b><br/>meaning 0.7 + importance 0.2 + recency 0.07<br/>+ usage 0.03 + global 0.1<br/>Keep the top 50<br/>skip those updated during the live thread<br/><i>reads memories</i>"]
+        embedQuery --> pickConversations["<b>Pick past conversations</b><br/>10 latest + 10 most relevant summaries<br/><i>reads conversations</i>"]
     end
 
     retrieval --> prompt
 
-    subgraph prompt ["2. Prompt"]
+    subgraph prompt ["<b>2. Prompt</b>"]
         direction LR
-        dedup["Drop what the live thread<br/>has already seen"] --> blocks["latest_conversations<br/>relevant_conversations<br/>relevant_memories<br/>user_message with datetime and timezone"]
+        dedup["<b>Deduplicate</b><br/>Drop what the live thread<br/>has already seen"] --> blocks["<b>Prompt blocks</b><br/>latest_conversations<br/>relevant_conversations<br/>relevant_memories<br/>user_message with datetime and timezone"]
     end
 
     prompt --> agent
 
-    subgraph agent ["3. Agent loop"]
+    subgraph agent ["<b>3. Agent loop</b>"]
         direction LR
-        input["Static instructions<br/>+ live thread items, tool outputs included<br/>+ the new prompt<br/><i>reads thread_items</i>"] --> codex["Codex Responses"]
-        codex <-->|tool call| tools["shell, read, patch,<br/>question, web_search"]
-        codex <-->|tool call| recall["recall: semantic + keyword<br/>search, fused by rank<br/><i>reads archived_turns</i>"]
+        input["<b>Model input</b><br/>Static instructions<br/>+ live thread items, tool outputs included<br/>+ the new prompt<br/><i>reads thread_items</i>"] --> codex["<b>Codex Responses</b>"]
+        codex <-->|tool call| tools["<b>Tools</b><br/>shell, read, patch,<br/>question, web_search"]
+        codex <-->|tool call| recall["<b>recall</b><br/>Semantic + keyword search,<br/>fused by rank<br/><i>reads archived_turns</i>"]
         codex -->|user steers mid-turn| codex
-        codex -->|final reply| stream["Stream the reply to the UI"]
-        stream --> save["Save the messages and raw thread items<br/><i>writes messages, thread_items</i>"]
+        codex -->|final reply| stream["<b>Stream</b><br/>Send the reply to the UI"]
+        stream --> save["<b>Save</b><br/>Messages and raw thread items<br/><i>writes messages, thread_items</i>"]
     end
 
     agent --> curation
 
-    subgraph curation ["4. Curation, in the background"]
+    subgraph curation ["<b>4. Curation, in the background</b>"]
         direction LR
-        curationInput["Up to 50 retrieved memories<br/>+ memories from the live thread<br/>+ 3 previous messages<br/>+ the full latest turn"] --> curationCall["Codex returns operations"]
-        curationCall --> operations["upsert: create, merge, keep dated history<br/>delete: forget request, merged duplicate"]
-        operations --> embedMemory["Embed each new content<br/><i>writes memories</i>"]
+        curationInput["<b>Curation input</b><br/>Up to 50 retrieved memories<br/>+ memories from the live thread<br/>+ 3 previous messages<br/>+ the full latest turn"] --> curationCall["<b>Codex call</b><br/>Returns memory operations"]
+        curationCall --> operations["<b>Apply operations</b><br/>upsert: create, merge, keep dated history<br/>delete: forget request, merged duplicate"]
+        operations --> embedMemory["<b>Embed</b><br/>Each new content<br/><i>writes memories</i>"]
     end
 
-    curation --> overflow{"Context over<br/>100k tokens?"}
-    overflow -->|no| next(["Ready for the next message"])
+    curation --> overflow{"<b>Context over<br/>100k tokens?</b>"}
+    overflow -->|no| next(["<b>Ready for the next message</b>"])
     overflow -->|yes| compaction
 
-    subgraph compaction ["5. Compaction"]
+    subgraph compaction ["<b>5. Compaction</b>"]
         direction LR
-        oldest["Oldest half of the live thread,<br/>cut before a user message"] --> summarize["Codex summary, 300 words max<br/><i>writes conversations</i>"]
-        oldest --> turns["One transcript per exchange, embedded<br/><i>writes archived_turns + FTS5 index</i>"]
-        oldest --> assign["Tag the messages with the conversation id,<br/>they leave the live thread<br/><i>writes messages</i>"]
+        oldest["<b>Split</b><br/>Oldest half of the live thread,<br/>cut before a user message"] --> summarize["<b>Summarize</b><br/>Codex summary, 300 words max<br/><i>writes conversations</i>"]
+        oldest --> turns["<b>Archive exchanges</b><br/>One transcript per exchange, embedded<br/><i>writes archived_turns + FTS5 index</i>"]
+        oldest --> assign["<b>Retire messages</b><br/>Tag them with the conversation id,<br/>they leave the live thread<br/><i>writes messages</i>"]
     end
 
     compaction --> next
 
-    classDef endpoint fill:#f3f4f6,stroke:#6b7280,color:#111827
-    classDef retrievalNode fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
-    classDef promptNode fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
-    classDef agentNode fill:#fef3c7,stroke:#d97706,color:#78350f
-    classDef curationNode fill:#dcfce7,stroke:#16a34a,color:#14532d
-    classDef compactionNode fill:#ffe4e6,stroke:#e11d48,color:#881337
-    classDef decision fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    classDef endpoint fill:#6b728033,stroke:#6b7280,stroke-width:2px
+    classDef retrievalNode fill:#3b82f633,stroke:#3b82f6,stroke-width:2px
+    classDef promptNode fill:#8b5cf633,stroke:#8b5cf6,stroke-width:2px
+    classDef agentNode fill:#f59e0b33,stroke:#f59e0b,stroke-width:2px
+    classDef curationNode fill:#22c55e33,stroke:#22c55e,stroke-width:2px
+    classDef compactionNode fill:#f43f5e33,stroke:#f43f5e,stroke-width:2px
+    classDef decision fill:#eab30833,stroke:#eab308,stroke-width:2px
 
     class start,wait,next endpoint
     class query,embedQuery,rankMemories,pickConversations retrievalNode
@@ -76,11 +76,11 @@ flowchart TB
     class oldest,summarize,turns,assign compactionNode
     class overflow decision
 
-    style retrieval fill:#eff6ff,stroke:#2563eb,color:#1e3a8a
-    style prompt fill:#f5f3ff,stroke:#7c3aed,color:#4c1d95
-    style agent fill:#fffbeb,stroke:#d97706,color:#78350f
-    style curation fill:#f0fdf4,stroke:#16a34a,color:#14532d
-    style compaction fill:#fff1f2,stroke:#e11d48,color:#881337
+    style retrieval fill:#3b82f612,stroke:#3b82f6
+    style prompt fill:#8b5cf612,stroke:#8b5cf6
+    style agent fill:#f59e0b12,stroke:#f59e0b
+    style curation fill:#22c55e12,stroke:#22c55e
+    style compaction fill:#f43f5e12,stroke:#f43f5e
 ```
 
 ## Memory layers
