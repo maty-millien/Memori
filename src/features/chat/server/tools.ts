@@ -14,7 +14,7 @@ export const SHELL_PATH = process.env.SHELL || "/bin/sh";
 export const SHELL_TIMEOUT_MS = 120_000;
 export const SHELL_MAX_LINES = 2_000;
 const SHELL_MAX_BYTES = 50 * 1024;
-const SHELL_OUTPUT_DIR = ".memori/shell";
+const SHELL_OUTPUT_DIR = ".remanence/shell";
 
 export const READ_MAX_LINES = 2_000;
 const READ_MAX_LINE_LENGTH = 2_000;

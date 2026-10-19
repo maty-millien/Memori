@@ -8,9 +8,9 @@ import {
   type Conversation,
   type Memory,
   type MemoryOperation,
-  type MemoriUIMessage,
+  type RemanenceUIMessage,
   type RetrievedMemory,
-} from "@/shared/lib/memori";
+} from "@/shared/lib/remanence";
 import { cn } from "@/shared/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { Badge } from "@/shared/ui/badge";
@@ -38,7 +38,7 @@ import {
 } from "@/shared/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
-type Part = MemoriUIMessage["parts"][number];
+type Part = RemanenceUIMessage["parts"][number];
 type DataPart<T extends Part["type"]> = Extract<Part, { type: T; data: unknown }>["data"];
 
 const SCORE_COLUMNS = [
@@ -269,7 +269,7 @@ function OperationTable({
   );
 }
 
-export function DebugDialog({ message }: { message: MemoriUIMessage }) {
+export function DebugDialog({ message }: { message: RemanenceUIMessage }) {
   const { retrieval, prompt, curation, reasoning, compaction, errors, usage } = collect(
     message.parts,
   );

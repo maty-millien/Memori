@@ -103,5 +103,5 @@ $RECYCLE.BIN/
 .vercel/
 .netlify/
 
-# Memori local data
-.memori/
+# Remanence local data
+.remanence/

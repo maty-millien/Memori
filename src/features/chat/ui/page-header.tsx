@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { resetEverything, triggerCompaction } from "@/features/memories/server/functions";
 import { MemoriesDialog } from "@/features/memories/ui/memories-dialog";
-import type { Conversation, Memory } from "@/shared/lib/memori";
+import type { Conversation, Memory } from "@/shared/lib/remanence";
 import { cn } from "@/shared/lib/utils";
 import {
   AlertDialog,
@@ -80,7 +80,7 @@ export function PageHeader({
             <path key={d} d={d} />
           ))}
         </svg>
-        <span className="[text-box:trim-both_cap_alphabetic]">Memori</span>
+        <span className="[text-box:trim-both_cap_alphabetic]">Remanence</span>
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger

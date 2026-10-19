@@ -2,8 +2,8 @@ import {
   messageText,
   type Conversation,
   type Memory,
-  type MemoriUIMessage,
-} from "@/shared/lib/memori";
+  type RemanenceUIMessage,
+} from "@/shared/lib/remanence";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -64,11 +64,11 @@ export function buildContextPrompt(
   return [...blocks, content].join("\n\n");
 }
 
-export function userContent(message: MemoriUIMessage) {
+export function userContent(message: RemanenceUIMessage) {
   return messageText(message.parts).trim();
 }
 
-function assistantLines(message: MemoriUIMessage) {
+function assistantLines(message: RemanenceUIMessage) {
   return message.parts.flatMap((part) => {
     if (part.type === "text" && part.text.trim()) {
       return [part.text.trim()];
@@ -103,7 +103,7 @@ function assistantLines(message: MemoriUIMessage) {
   });
 }
 
-export function transcript(messages: MemoriUIMessage[]) {
+export function transcript(messages: RemanenceUIMessage[]) {
   return messages
     .flatMap((message) => {
       const body =

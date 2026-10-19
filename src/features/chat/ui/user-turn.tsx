@@ -1,7 +1,7 @@
-import { messageText, type MemoriUIMessage } from "@/shared/lib/memori";
+import { messageText, type RemanenceUIMessage } from "@/shared/lib/remanence";
 import { Bubble, BubbleContent } from "@/shared/ui/bubble";
 
-export function UserTurn({ message }: { message: MemoriUIMessage }) {
+export function UserTurn({ message }: { message: RemanenceUIMessage }) {
   return (
     <div className="flex flex-col items-end gap-2">
       <Bubble variant="secondary" align="end" className="max-w-[70%]">

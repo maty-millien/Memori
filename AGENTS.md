@@ -2,7 +2,7 @@
 
 ## Description
 
-Memori is a local research app for long-term agent memory. There is a single endless chat. The server runs its own agent loop against the Codex Responses endpoint (`chatgpt.com/backend-api/codex/responses`) with the Codex CLI login, and gives the model a `shell` tool plus the hosted `web_search` tool. Each turn retrieves ranked memories and summaries of past conversations and injects only the ones the thread has not seen. A separate Codex call returns memory operations (upsert or delete) that the server applies. When the context passes 100k tokens, the oldest half of the live messages is summarized into a past conversation, and later turns send only the stored response items of the remaining live messages. An info icon under each reply opens a debug dialog with the full trace of the turn.
+Remanence is a local research app for long-term agent memory. There is a single endless chat. The server runs its own agent loop against the Codex Responses endpoint (`chatgpt.com/backend-api/codex/responses`) with the Codex CLI login, and gives the model a `shell` tool plus the hosted `web_search` tool. Each turn retrieves ranked memories and summaries of past conversations and injects only the ones the thread has not seen. A separate Codex call returns memory operations (upsert or delete) that the server applies. When the context passes 100k tokens, the oldest half of the live messages is summarized into a past conversation, and later turns send only the stored response items of the remaining live messages. An info icon under each reply opens a debug dialog with the full trace of the turn.
 
 ## Project rules
 
@@ -25,7 +25,7 @@ Browser code reaches server code (`server/` folders, `node:` imports) only throu
 
 - Put new code in the feature that uses it. Move it to `shared/` only when a second feature needs it, and move it back when only one feature is left.
 - Don't create a file for something with a single caller. Keep small components, helpers, and constants in the file that uses them, and split a file only when it holds unrelated things.
-- Before writing a helper, check `shared/lib/memori.ts`, `shared/lib/format.ts`, the standard library, and installed dependencies.
+- Before writing a helper, check `shared/lib/remanence.ts`, `shared/lib/format.ts`, the standard library, and installed dependencies.
 - Don't add interfaces, wrappers, options, or config for a single implementation or a value that never changes. Don't define a type that renames the fields of another type; derive it with `Pick`, `Omit`, or `z.infer`.
 - Don't add fallbacks for data shapes or cases that can't occur. When you change a stored data shape, update the type and remove the old handling.
 - When a change leaves code, props, exports, files, dependencies, or config unused, delete it in the same change. Move deleted files to the Trash with `trash`, and trash a folder once it's empty.

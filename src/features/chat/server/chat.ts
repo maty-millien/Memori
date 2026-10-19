@@ -24,9 +24,9 @@ import {
   type CallUsage,
   type Conversation,
   type Memory,
-  type MemoriUIMessage,
+  type RemanenceUIMessage,
   type Question,
-} from "@/shared/lib/memori";
+} from "@/shared/lib/remanence";
 import {
   chatOptions,
   itemSchema,
@@ -53,10 +53,10 @@ import {
   SHELL_TIMEOUT_MS,
 } from "./tools";
 
-type Chunk = InferUIMessageChunk<MemoriUIMessage>;
+type Chunk = InferUIMessageChunk<RemanenceUIMessage>;
 
 let activeTurn: {
-  userMessage: MemoriUIMessage;
+  userMessage: RemanenceUIMessage;
   chunks: Chunk[];
   followers: Set<ReadableStreamDefaultController<Chunk>>;
   controller: AbortController;
@@ -120,7 +120,7 @@ const memoryKey = (memory: Memory) => `${memory.id}@${memory.updatedAt}`;
 
 const conversationKey = (conversation: Conversation) => `conversation:${conversation.id}`;
 
-function seedItems(history: MemoriUIMessage[]) {
+function seedItems(history: RemanenceUIMessage[]) {
   return history
     .filter((message) => message.role !== "user")
     .flatMap((message) => z.array(itemSchema).parse(getThreadItems(message.id) ?? []));
@@ -128,14 +128,14 @@ function seedItems(history: MemoriUIMessage[]) {
 
 export function chatResponse(messageId: string, userText: string) {
   const createdAt = new Date();
-  const userMessage: MemoriUIMessage = {
+  const userMessage: RemanenceUIMessage = {
     id: messageId,
     role: "user",
     parts: [{ type: "text", text: userText }],
     metadata: { createdAt: createdAt.toISOString() },
   };
   let items: Item[] | null = null;
-  let finishTurn: ((message: MemoriUIMessage) => Promise<void>) | null = null;
+  let finishTurn: ((message: RemanenceUIMessage) => Promise<void>) | null = null;
   const turn: NonNullable<typeof activeTurn> = {
     userMessage,
     chunks: [],
@@ -146,7 +146,7 @@ export function chatResponse(messageId: string, userText: string) {
   activeTurn = turn;
   const { signal } = turn.controller;
 
-  const stream = createUIMessageStream<MemoriUIMessage>({
+  const stream = createUIMessageStream<RemanenceUIMessage>({
     onError: errorMessage,
     execute: async ({ writer }) => {
       writer.write({ type: "start" });
@@ -592,7 +592,7 @@ export function chatResponse(messageId: string, userText: string) {
       writer.write({ type: "finish" });
       items = [userItem, ...reply.items];
       finishTurn = async (message) => {
-        const parts: MemoriUIMessage["parts"] = [];
+        const parts: RemanenceUIMessage["parts"] = [];
         let curationUsage: CallUsage | null = null;
         const curationPrompt = [
           wrap(

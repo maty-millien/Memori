@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { chatResponse, resumeResponse } from "@/features/chat/server/chat";
-import { messageText } from "@/shared/lib/memori";
+import { messageText } from "@/shared/lib/remanence";
 
 const body = z.object({
   message: z.object({

@@ -1,4 +1,4 @@
-import type { Memory, RetrievedMemory } from "@/shared/lib/memori";
+import type { Memory, RetrievedMemory } from "@/shared/lib/remanence";
 import {
   listArchivedTurnVectors,
   listConversationVectors,

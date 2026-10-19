@@ -1,4 +1,4 @@
-import type { MemoriUIMessage } from "@/shared/lib/memori";
+import type { RemanenceUIMessage } from "@/shared/lib/remanence";
 import { runOnce } from "@/shared/server/codex";
 import {
   assignConversation,
@@ -20,7 +20,7 @@ const SUMMARY_PROMPT =
   "Open: unanswered questions and next steps.\n" +
   "Keep only what this conversation adds. Skip greetings, small talk, and general facts about the user.";
 
-export async function archiveConversation(history: MemoriUIMessage[]) {
+export async function archiveConversation(history: RemanenceUIMessage[]) {
   const weights = history.map(
     (message) => JSON.stringify(getThreadItems(message.id) ?? message.parts).length,
   );
@@ -36,7 +36,7 @@ export async function archiveConversation(history: MemoriUIMessage[]) {
   if (!log) {
     return null;
   }
-  const turns: MemoriUIMessage[][] = [];
+  const turns: RemanenceUIMessage[][] = [];
   for (const message of messages) {
     const last = turns.at(-1);
     if (message.role === "user" || !last) {

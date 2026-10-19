@@ -1,5 +1,5 @@
 import { formatNumber } from "@/shared/lib/format";
-import { CONTEXT_WINDOW } from "@/shared/lib/memori";
+import { CONTEXT_WINDOW } from "@/shared/lib/remanence";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/shared/ui/hover-card";
 
 const RADIUS = 8;

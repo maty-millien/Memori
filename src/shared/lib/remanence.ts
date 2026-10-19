@@ -86,7 +86,7 @@ export type MemoryOperation = {
   result: string;
 };
 
-type MemoriData = {
+type RemanenceData = {
   retrieval: {
     memories: RetrievedMemory[];
     latest: Conversation[];
@@ -115,4 +115,4 @@ type MemoriData = {
   error: { message: string };
 };
 
-export type MemoriUIMessage = UIMessage<{ createdAt: string }, MemoriData>;
+export type RemanenceUIMessage = UIMessage<{ createdAt: string }, RemanenceData>;

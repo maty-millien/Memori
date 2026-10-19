@@ -9,9 +9,9 @@ import type {
   ChatModel,
   ChatSettings,
   Conversation,
-  MemoriUIMessage,
+  RemanenceUIMessage,
   Memory,
-} from "@/shared/lib/memori";
+} from "@/shared/lib/remanence";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import {
   MessageScroller,
@@ -27,13 +27,13 @@ import { Composer } from "./composer";
 import { PageHeader } from "./page-header";
 import { UserTurn } from "./user-turn";
 
-let browserChat: Chat<MemoriUIMessage> | undefined;
+let browserChat: Chat<RemanenceUIMessage> | undefined;
 
-function getChat(initialMessages: MemoriUIMessage[], router: AnyRouter) {
+function getChat(initialMessages: RemanenceUIMessage[], router: AnyRouter) {
   const create = () =>
-    new Chat<MemoriUIMessage>({
+    new Chat<RemanenceUIMessage>({
       messages: initialMessages,
-      transport: new DefaultChatTransport<MemoriUIMessage>({
+      transport: new DefaultChatTransport<RemanenceUIMessage>({
         api: "/api/chat",
         prepareSendMessagesRequest: ({ messages }) => ({
           body: { message: messages.at(-1) },
@@ -51,7 +51,7 @@ function getChat(initialMessages: MemoriUIMessage[], router: AnyRouter) {
   return browserChat;
 }
 
-function contextTokens(messages: MemoriUIMessage[]) {
+function contextTokens(messages: RemanenceUIMessage[]) {
   for (const message of messages.toReversed()) {
     for (const part of message.parts) {
       if (part.type === "data-usage") {
@@ -69,7 +69,7 @@ export function ChatPage({
   memories,
   conversations,
 }: {
-  initialMessages: MemoriUIMessage[];
+  initialMessages: RemanenceUIMessage[];
   models: ChatModel[];
   initialChatSettings: ChatSettings;
   memories: Memory[];

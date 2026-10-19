@@ -10,12 +10,12 @@ import {
   type Conversation,
   type Importance,
   type Memory,
-  type MemoriUIMessage,
-} from "@/shared/lib/memori";
+  type RemanenceUIMessage,
+} from "@/shared/lib/remanence";
 
-mkdirSync(".memori", { recursive: true });
+mkdirSync(".remanence", { recursive: true });
 
-const db = new DatabaseSync(".memori/memori.db");
+const db = new DatabaseSync(".remanence/remanence.db");
 
 db.exec(`
   PRAGMA journal_mode = WAL;
@@ -269,7 +269,7 @@ export function resetDatabase() {
   );
 }
 
-function queryMessages(where: string): MemoriUIMessage[] {
+function queryMessages(where: string): RemanenceUIMessage[] {
   return db
     .prepare(`SELECT id, role, parts, created_at FROM messages ${where} ORDER BY rowid`)
     .all()
@@ -292,7 +292,7 @@ export function listLiveMessages() {
   return queryMessages("WHERE conversation_id IS NULL");
 }
 
-export function saveMessage(message: MemoriUIMessage) {
+export function saveMessage(message: RemanenceUIMessage) {
   db.prepare(
     "INSERT INTO messages (id, role, parts, created_at) VALUES (?, ?, ?, ?)",
   ).run(
@@ -303,7 +303,7 @@ export function saveMessage(message: MemoriUIMessage) {
   );
 }
 
-export function updateMessageParts(id: string, parts: MemoriUIMessage["parts"]) {
+export function updateMessageParts(id: string, parts: RemanenceUIMessage["parts"]) {
   db.prepare("UPDATE messages SET parts = ? WHERE id = ?").run(JSON.stringify(parts), id);
 }
 

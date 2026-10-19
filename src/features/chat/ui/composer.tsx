@@ -1,7 +1,7 @@
 import { IconArrowUp, IconPlayerStopFilled } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 
-import type { ChatModel, ChatSettings } from "@/shared/lib/memori";
+import type { ChatModel, ChatSettings } from "@/shared/lib/remanence";
 import { Button } from "@/shared/ui/button";
 
 import { ContextRing } from "./context-ring";
@@ -65,7 +65,7 @@ export function Composer({
         ref={textarea}
         rows={1}
         value={value}
-        placeholder="Ask Memori"
+        placeholder="Ask Remanence"
         className="field-sizing-content max-h-50 min-h-11 w-full resize-none bg-transparent px-4 pt-3 text-base leading-[1.3] text-primary outline-none placeholder:text-muted-foreground"
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => {

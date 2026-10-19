@@ -2,7 +2,7 @@ import { IconBrain, IconMessages } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
 import { formatDate } from "@/shared/lib/format";
-import type { Conversation, Memory } from "@/shared/lib/memori";
+import type { Conversation, Memory } from "@/shared/lib/remanence";
 import { Badge } from "@/shared/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import {

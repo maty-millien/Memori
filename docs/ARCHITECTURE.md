@@ -1,4 +1,4 @@
-# How Memori works
+# How Remanence works
 
 One chat turn, from the user's message to compaction. Each step names the tables it reads or writes.
 

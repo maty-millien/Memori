@@ -1,4 +1,4 @@
-# Memori
+# Remanence
 
 A local research app for long-term agent memory. Every chat turn shows what the memory layer did: the memories it retrieved and how they scored, the prompt sent to the model, the reasoning, and each memory change.
 
@@ -15,4 +15,4 @@ bun install
 bun run dev
 ```
 
-Retrieval and ranking settings are in [`config.ts`](../src/features/memories/server/config.ts). Data lives in `.memori/memori.db`. `bun run check` formats, lints, and type checks.
+Retrieval and ranking settings are in [`config.ts`](../src/features/memories/server/config.ts). Data lives in `.remanence/remanence.db`. `bun run check` formats, lints, and type checks.

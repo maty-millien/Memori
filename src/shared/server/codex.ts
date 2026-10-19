@@ -9,7 +9,7 @@ import {
   type CallUsage,
   type ChatModel,
   type ChatSettings,
-} from "@/shared/lib/memori";
+} from "@/shared/lib/remanence";
 
 import { getChatSettings } from "./db";
 
@@ -258,7 +258,7 @@ export async function runAgent(
       text: schema
         ? { format: { type: "json_schema", name: "output", strict: true, schema } }
         : undefined,
-      prompt_cache_key: "memori",
+      prompt_cache_key: "remanence",
       store: false,
       stream: true,
     },

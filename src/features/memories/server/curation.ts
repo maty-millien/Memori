@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { IMPORTANCES, SCOPES, type MemoryOperation } from "@/shared/lib/memori";
+import { IMPORTANCES, SCOPES, type MemoryOperation } from "@/shared/lib/remanence";
 import { runOnce } from "@/shared/server/codex";
 import { deleteMemory, getMemory, insertMemory, updateMemory } from "@/shared/server/db";
 

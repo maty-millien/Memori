@@ -5,7 +5,7 @@ import {
   effortLabel,
   type ChatModel,
   type ChatSettings,
-} from "@/shared/lib/memori";
+} from "@/shared/lib/remanence";
 import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,

@@ -16,7 +16,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { sendAnswers } from "@/features/chat/server/functions";
-import { messageText, type MemoriUIMessage, type Question } from "@/shared/lib/memori";
+import {
+  messageText,
+  type RemanenceUIMessage,
+  type Question,
+} from "@/shared/lib/remanence";
 import { cn } from "@/shared/lib/utils";
 import { Bubble, BubbleContent } from "@/shared/ui/bubble";
 import { Button } from "@/shared/ui/button";
@@ -31,7 +35,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 import { DebugDialog } from "./debug-dialog";
 
-type Part = MemoriUIMessage["parts"][number];
+type Part = RemanenceUIMessage["parts"][number];
 
 function duration(ms: number) {
   const seconds = ms / 1000;
@@ -341,7 +345,7 @@ export function AssistantTurn({
   message,
   streaming,
 }: {
-  message: MemoriUIMessage;
+  message: RemanenceUIMessage;
   streaming: boolean;
 }) {
   const last = message.parts.findLast(isStep);
