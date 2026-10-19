@@ -9,7 +9,7 @@ flowchart TD
 
     subgraph retrieval ["1. Retrieval"]
         query["Query: tail of the last 2 messages + the new message"] --> embedQuery["Embed the query"]
-        embedQuery --> rankMemories["Memories: rank all of them<br/>score = meaning 0.7 + importance 0.2 + recency 0.07 + usage 0.03 + global 0.1<br/>drop topical ones under 0.3 similarity unless identity, keep the top 50, skip memories updated during the live thread"]
+        embedQuery --> rankMemories["Memories: rank all of them<br/>score = meaning 0.7 + importance 0.2 + recency 0.07 + usage 0.03 + global 0.1<br/>keep the top 50, skip memories updated during the live thread"]
         embedQuery --> pickConversations["Past conversations: 10 most recent + 10 most similar summaries"]
     end
 
