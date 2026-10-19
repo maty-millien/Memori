@@ -63,18 +63,8 @@ export function retrieve(query: Float32Array, liveSince: string | undefined) {
     liveSince !== undefined && memory.updatedAt >= liveSince;
   const memories = all.filter((vector) => !isLive(vector));
   const live = all.filter(isLive).map(({ memory }) => memory);
-  const candidates = new Map(
-    nearest(memories, query, SETTINGS.retrievalPoolK).map(
-      ({ vector: { memory }, similarity }) => [memory.id, { memory, similarity }],
-    ),
-  );
-  for (const { memory } of memories) {
-    if (memory.scope === "global" && !candidates.has(memory.id)) {
-      candidates.set(memory.id, { memory, similarity: 0 });
-    }
-  }
-  const retrieved = [...candidates.values()]
-    .map(({ memory, similarity }) => rank(memory, similarity))
+  const retrieved = memories
+    .map(({ memory, embedding }) => rank(memory, cosine(query, embedding)))
     .toSorted((a, b) => b.score.total - a.score.total)
     .slice(0, SETTINGS.retrievalTopK);
   markAccessed(retrieved.map((item) => item.memory.id));
