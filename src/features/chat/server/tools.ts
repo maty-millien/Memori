@@ -1,8 +1,16 @@
-import { execFileSync, spawn } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, resolve } from "node:path";
 
+export const SHELL_PATH = process.env.SHELL || "/bin/sh";
 export const SHELL_TIMEOUT_MS = 120_000;
 export const SHELL_MAX_LINES = 2_000;
 const SHELL_MAX_BYTES = 50 * 1024;
@@ -41,7 +49,7 @@ export function shell(
   }
   const ms = timeout ?? SHELL_TIMEOUT_MS;
   return new Promise<ShellResult>((done) => {
-    const child = spawn("/bin/zsh", ["-c", command], {
+    const child = spawn(SHELL_PATH, ["-c", command], {
       cwd,
       env: { ...process.env, TERM: "xterm-256color", AGENT: "1" },
       stdio: ["ignore", "pipe", "pipe"],
@@ -352,7 +360,7 @@ export function applyPatch(text: string) {
     status: "A" | "M" | "D";
     file: string;
     content?: string;
-    trash?: string;
+    remove?: string;
   }[] = [];
   const updated = new Map<string, string>();
   for (const hunk of parsePatch(text)) {
@@ -369,7 +377,7 @@ export function applyPatch(text: string) {
       throw new Error(`File does not exist: ${file}`);
     }
     if (hunk.type === "delete") {
-      changes.push({ status: "D", file, trash: file });
+      changes.push({ status: "D", file, remove: file });
       continue;
     }
     const content = applyChunks(
@@ -378,7 +386,7 @@ export function applyPatch(text: string) {
       hunk.chunks,
     );
     if (hunk.movePath) {
-      changes.push({ status: "M", file: homePath(hunk.movePath), content, trash: file });
+      changes.push({ status: "M", file: homePath(hunk.movePath), content, remove: file });
     } else {
       updated.set(file, content);
       changes.push({ status: "M", file, content });
@@ -389,8 +397,8 @@ export function applyPatch(text: string) {
       mkdirSync(dirname(change.file), { recursive: true });
       writeFileSync(change.file, change.content);
     }
-    if (change.trash) {
-      execFileSync("trash", [change.trash]);
+    if (change.remove) {
+      unlinkSync(change.remove);
     }
   }
   return [

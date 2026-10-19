@@ -49,6 +49,7 @@ import {
   READ_MAX_LINES,
   shell,
   SHELL_MAX_LINES,
+  SHELL_PATH,
   SHELL_TIMEOUT_MS,
 } from "./tools";
 
@@ -241,7 +242,7 @@ export function chatResponse(messageId: string, userText: string) {
         definition: {
           type: "function",
           name: "shell",
-          description: `Run a zsh command on the user's Mac and return its combined output. Quote file paths containing spaces or special characters. When output is large, the full result is saved to a file and the last ${SHELL_MAX_LINES} lines are returned.`,
+          description: `Run a command with ${SHELL_PATH} on the machine and return its combined output. Quote file paths containing spaces or special characters. When output is large, the full result is saved to a file and the last ${SHELL_MAX_LINES} lines are returned.`,
           strict: true,
           parameters: {
             type: "object",
@@ -286,7 +287,7 @@ export function chatResponse(messageId: string, userText: string) {
         definition: {
           type: "function",
           name: "read",
-          description: `Read a file or directory on the user's Mac. Supports text files, images, and PDFs; images and PDFs are shown to you directly. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files in sections. Prefer one larger read over many small slices.`,
+          description: `Read a file or directory on the machine. Supports text files, images, and PDFs; images and PDFs are shown to you directly. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files in sections. Prefer one larger read over many small slices.`,
           strict: true,
           parameters: {
             type: "object",
