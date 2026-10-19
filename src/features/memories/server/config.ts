@@ -4,7 +4,7 @@ export const SETTINGS = {
   retrievalTopK: 50,
   latestConversations: 10,
   relevantConversations: 10,
-  curationPreviousMessages: 3,
+  curationPreviousMessages: 2,
   recallTopK: 5,
   recallPoolK: 20,
   importanceWeights: {

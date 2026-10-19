@@ -32,7 +32,7 @@ export function formatMemories(memories: Memory[]) {
   return memories
     .map(
       (memory) =>
-        `- id: "${memory.id}"\n  importance: ${memory.importance}\n  content: ${memory.content}`,
+        `- id: "${memory.id}"\n  importance: ${memory.importance}\n  updated: ${localIso(new Date(memory.updatedAt)).slice(0, 10)}\n  content: ${memory.content}`,
     )
     .join("\n");
 }
@@ -72,31 +72,32 @@ export function userContent(message: MemoriUIMessage) {
 function assistantLines(message: MemoriUIMessage) {
   return message.parts.flatMap((part) => {
     if (part.type === "text" && part.text.trim()) {
-      return [`assistant: ${part.text.trim()}`];
+      return [part.text.trim()];
     }
     if (part.type === "data-command") {
-      return [`assistant ran: ${part.data.command}`];
+      return [`[ran] ${part.data.command}`];
     }
     if (part.type === "data-steer") {
-      return [`user (while the assistant was working): ${part.data.text}`];
+      return [`[user, while the assistant was working] ${part.data.text}`];
     }
     if (part.type === "data-patch") {
-      return [`assistant edited files: ${part.data.output}`];
+      return [`[edited] ${part.data.output}`];
     }
     if (part.type === "data-question") {
       return part.data.questions.map(
         (question, index) =>
-          `assistant asked: ${question.question} -> user answered: ${part.data.answers?.[index]?.join(", ") || "nothing"}`,
+          `[asked] ${question.question} -> user answered: ${part.data.answers?.[index]?.join(", ") || "nothing"}`,
       );
     }
     if (part.type === "data-read") {
-      return [`assistant read: ${part.data.path}`];
+      return [`[read] ${part.data.path}`];
+    }
+    if (part.type === "data-recall") {
+      return [`[recalled] ${part.data.query}`];
     }
     if (part.type === "data-search") {
       return [
-        part.data.url
-          ? `assistant opened: ${part.data.url}`
-          : `assistant searched: ${part.data.query}`,
+        part.data.url ? `[opened] ${part.data.url}` : `[searched] ${part.data.query}`,
       ];
     }
     return [];
@@ -105,15 +106,19 @@ function assistantLines(message: MemoriUIMessage) {
 
 export function transcript(messages: MemoriUIMessage[]) {
   return messages
-    .flatMap((message) =>
-      message.role === "user"
-        ? [
-            `user: ${timestampedUserContent(
-              userContent(message),
-              new Date(message.metadata?.createdAt ?? Date.now()),
-            )}`,
-          ]
-        : assistantLines(message),
-    )
+    .flatMap((message) => {
+      const body =
+        message.role === "user"
+          ? userContent(message)
+          : assistantLines(message).join("\n");
+      if (!body) {
+        return [];
+      }
+      const attributes =
+        message.role === "user"
+          ? ` datetime="${localIso(new Date(message.metadata?.createdAt ?? Date.now()))}"`
+          : "";
+      return [`<message role="${message.role}"${attributes}>\n${body}\n</message>`];
+    })
     .join("\n");
 }
