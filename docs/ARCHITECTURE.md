@@ -14,7 +14,7 @@ flowchart TB
 
     subgraph retrieval ["<b>1. Retrieval</b>"]
         direction LR
-        query["<b>Build the query</b><br/>Last 500 characters of each<br/>of the last 2 messages<br/>+ the new message"] --> embedQuery["<b>Embed the query</b><br/>voyage-4-large<br/>through OpenRouter"]
+        query["<b>Build the query</b><br/>Last 500 characters of each<br/>of the last 2 messages<br/>+ the new message"] --> embedQuery["<b>Embed the query</b><br/>EmbeddingGemma 300m<br/>locally"]
         embedQuery --> rankMemories["<b>Rank memories</b><br/>similarity 0.7 + importance 0.2 + recency 0.07<br/>+ usage 0.03 + global 0.1<br/>Keep the top 50 and bump their access count<br/>Skip those updated during the live thread<br/><i>reads and writes memories</i>"]
         embedQuery --> pickConversations["<b>Pick past conversations</b><br/>10 latest by end date<br/>+ 10 closest to the query among the others<br/><i>reads conversations</i>"]
     end

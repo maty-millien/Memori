@@ -27,11 +27,10 @@ The agent works on the machine running the server, your computer or a remote one
 
 ## Getting started
 
-You need [Bun](https://bun.sh), Node 26, the [Codex CLI](https://github.com/openai/codex) logged in with ChatGPT, and an [OpenRouter](https://openrouter.ai) key for embeddings.
+You need [Bun](https://bun.sh), Node 26, and the [Codex CLI](https://github.com/openai/codex) logged in with ChatGPT. Embeddings run locally with [EmbeddingGemma](https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX), downloaded (about 1.2 GB) on first use.
 
 ```sh
 codex login
-cp .env.example .env   # set OPENROUTER_API_KEY
 bun install
 bun run dev
 ```

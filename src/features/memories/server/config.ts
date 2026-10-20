@@ -1,6 +1,5 @@
 export const SETTINGS = {
-  embeddingModel: "voyageai/voyage-4-large",
-  embeddingDimensions: 2048,
+  embeddingModel: "onnx-community/embeddinggemma-300m-ONNX",
   retrievalTopK: 50,
   latestConversations: 10,
   relevantConversations: 10,

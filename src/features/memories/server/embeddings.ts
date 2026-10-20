@@ -1,40 +1,29 @@
-import { z } from "zod";
+import { pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
 
 import { SETTINGS } from "./config";
 
-function openrouterApiKey() {
-  const value = process.env.OPENROUTER_API_KEY;
-  if (!value) {
-    throw new Error("OPENROUTER_API_KEY must be set");
-  }
-  return value;
-}
+const PREFIXES = {
+  query: "task: search result | query: ",
+  document: "title: none | text: ",
+};
 
-const response = z.object({
-  data: z.array(z.object({ index: z.number(), embedding: z.array(z.number()) })),
-});
+let extractor: Promise<FeatureExtractionPipeline> | undefined;
 
 export async function embed(texts: string[], inputType: "query" | "document") {
-  const result = await fetch("https://openrouter.ai/api/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${openrouterApiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: SETTINGS.embeddingModel,
-      input: texts,
-      dimensions: SETTINGS.embeddingDimensions,
-      input_type: inputType,
-    }),
+  extractor ??= pipeline("feature-extraction", SETTINGS.embeddingModel, {
+    dtype: "fp32",
+    device: "cpu",
   });
-  if (!result.ok) {
-    throw new Error(`Embedding failed: ${result.status} ${await result.text()}`);
-  }
-  return response
-    .parse(await result.json())
-    .data.toSorted((a, b) => a.index - b.index)
-    .map((item) => Float32Array.from(item.embedding));
+  const model = await extractor;
+  return Promise.all(
+    texts.map(async (text) => {
+      const output = await model(PREFIXES[inputType] + text, {
+        pooling: "mean",
+        normalize: true,
+      });
+      return Float32Array.from(output.tolist()[0]);
+    }),
+  );
 }
 
 export async function embedOne(text: string, inputType: "query" | "document") {
