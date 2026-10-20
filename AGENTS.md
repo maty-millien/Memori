@@ -2,7 +2,7 @@
 
 ## Description
 
-Remanence is a local research app for long-term agent memory. There is a single endless chat. The server runs its own agent loop against the Codex Responses endpoint (`chatgpt.com/backend-api/codex/responses`) with the Codex CLI login, and gives the model a `shell` tool plus the hosted `web_search` tool. Each turn retrieves ranked memories and summaries of past conversations and injects only the ones the thread has not seen. A separate Codex call returns memory operations (upsert or delete) that the server applies. When the context passes 100k tokens, the oldest half of the live messages is summarized into a past conversation, and later turns send only the stored response items of the remaining live messages. The agent can also write first: it plans follow-ups with a `schedule` tool, and a check-in is due after 6 quiet hours. A server timer runs each due wakeup as a turn without a user message, saves the reply unless the model answers `SILENT`, and tells open tabs through `/api/events`. An info icon under each reply opens a debug dialog with the full trace of the turn.
+Remanence is a local research app for long-term agent memory, built around a single endless chat. The server runs its own agent loop against the Codex Responses endpoint with the Codex CLI login. Each turn injects relevant memories and past conversations, a separate call curates the memories afterwards, and old messages are compacted once the context grows too large. The agent can also write first through scheduled wakeups. `docs/README.md` describes the full flow of a turn.
 
 ## Project rules
 
