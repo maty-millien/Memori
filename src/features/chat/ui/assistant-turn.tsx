@@ -27,7 +27,7 @@ type Part = RemanenceUIMessage["parts"][number];
 
 function AssistantBubble({ children }: { children: ReactNode }) {
   return (
-    <Bubble variant="secondary">
+    <Bubble variant="secondary" className="origin-bottom-left">
       <BubbleContent>{children}</BubbleContent>
     </Bubble>
   );
@@ -40,8 +40,8 @@ function TypingBubble() {
         {[0, 1, 2].map((i) => (
           <span
             key={i}
-            className="size-2 animate-dot-grid rounded-full bg-muted-foreground"
-            style={{ animationDelay: `${i * 0.2}s` }}
+            className="size-2 animate-typing rounded-full bg-muted-foreground"
+            style={{ animationDelay: `${i * 0.15}s` }}
           />
         ))}
       </span>

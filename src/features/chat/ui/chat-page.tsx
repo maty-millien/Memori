@@ -18,6 +18,7 @@ import {
   type RemanenceUIMessage,
   type Memory,
 } from "@/shared/lib/remanence";
+import { cn } from "@/shared/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import {
   MessageScroller,
@@ -89,6 +90,9 @@ export function ChatPage({
     resume: true,
   });
   const busy = status === "submitted" || status === "streaming";
+  const [initialIds] = useState(
+    () => new Set(initialMessages.map((message) => message.id)),
+  );
   const queued = useRef<string[]>([]);
 
   useEffect(() => {
@@ -172,7 +176,11 @@ export function ChatPage({
                   key={message.id}
                   messageId={message.id}
                   scrollAnchor={message.role === "user"}
-                  className="-mx-4 -my-2 px-4 py-2"
+                  className={cn(
+                    "-mx-4 -my-2 px-4 py-2 [content-visibility:visible]",
+                    !initialIds.has(message.id) &&
+                      "[&_[data-slot=bubble]]:motion-safe:animate-bubble-in",
+                  )}
                 >
                   {message.role === "user" ? (
                     <UserBubble text={messageText(message.parts)} />
