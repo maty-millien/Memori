@@ -644,7 +644,11 @@ function runTurn(
               case "message":
                 if (done) {
                   thought();
-                  writer.write({ type: "text-start", id });
+                  writer.write({
+                    type: "text-start",
+                    id,
+                    providerMetadata: { codex: { phase: output.phase ?? null } },
+                  });
                   writer.write({
                     type: "text-delta",
                     id,

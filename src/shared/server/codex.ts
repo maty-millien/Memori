@@ -31,6 +31,7 @@ export const itemSchema = z.looseObject({
     .looseObject({ query: z.string().optional(), url: z.string().optional() })
     .optional(),
   content: z.array(z.looseObject({ text: z.string().optional() })).optional(),
+  phase: z.string().optional(),
 });
 
 export type Item = z.infer<typeof itemSchema>;

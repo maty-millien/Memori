@@ -170,6 +170,8 @@ export function AssistantTurn({
   const typing =
     streaming &&
     message.parts.some((part) => part.type === "data-prompt") &&
+    message.parts.findLast((part) => part.type === "text")?.providerMetadata?.codex
+      ?.phase !== "final_answer" &&
     !message.parts.some((part) => part.type === "data-question" && !part.data.answers);
   const text = messageText(message.parts, "\n\n");
   const [details, setDetails] = useState(false);
