@@ -38,8 +38,6 @@ export type Item = z.infer<typeof itemSchema>;
 const streamEvent = z.looseObject({
   type: z.string(),
   item: itemSchema.optional(),
-  item_id: z.string().optional(),
-  delta: z.string().optional(),
   message: z.string().optional(),
   response: z
     .looseObject({

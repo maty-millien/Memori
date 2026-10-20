@@ -617,14 +617,6 @@ function runTurn(
           steer: drain,
           signal,
           onEvent: (event) => {
-            if (event.type === "response.output_text.delta" && event.item_id) {
-              writer.write({
-                type: "text-delta",
-                id: event.item_id,
-                delta: event.delta ?? "",
-              });
-              return;
-            }
             const output = event.item;
             if (
               !output ||
@@ -651,11 +643,15 @@ function runTurn(
               }
               case "message":
                 if (done) {
-                  writer.write({ type: "text-end", id });
-                  since = performance.now();
-                } else {
                   thought();
                   writer.write({ type: "text-start", id });
+                  writer.write({
+                    type: "text-delta",
+                    id,
+                    delta: (output.content ?? []).map((part) => part.text ?? "").join(""),
+                  });
+                  writer.write({ type: "text-end", id });
+                  since = performance.now();
                 }
                 break;
               case "web_search_call": {
