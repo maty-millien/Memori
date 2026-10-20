@@ -47,8 +47,18 @@ const SCORE_COLUMNS = [
   ["total", "Total"],
 ] as const;
 
-function toolStep(part: Part) {
+function step(part: Part) {
   switch (part.type) {
+    case "reasoning":
+      return part.text ? { label: "Reasoning", text: part.text } : null;
+    case "text":
+      return {
+        label:
+          part.providerMetadata?.codex?.phase === "final_answer" ? "Reply" : "Commentary",
+        text: part.text,
+      };
+    case "data-steer":
+      return { label: "User steered", text: part.data.text };
     case "data-command":
       return {
         label: `Command (exit code ${part.data.exitCode})`,
@@ -86,8 +96,7 @@ function collect(parts: Part[]) {
     retrieval: undefined as DataPart<"data-retrieval"> | undefined,
     prompt: undefined as string | undefined,
     curation: undefined as DataPart<"data-curation"> | undefined,
-    reasoning: [] as string[],
-    tools: parts.flatMap((part) => toolStep(part) ?? []),
+    steps: parts.flatMap((part) => step(part) ?? []),
     compaction: undefined as DataPart<"data-compaction"> | undefined,
     errors: [] as string[],
     usage: undefined as DataPart<"data-usage"> | undefined,
@@ -102,11 +111,6 @@ function collect(parts: Part[]) {
         break;
       case "data-curation":
         trace.curation = part.data;
-        break;
-      case "reasoning":
-        if (part.text) {
-          trace.reasoning.push(part.text);
-        }
         break;
       case "data-compaction":
         trace.compaction = part.data;
@@ -310,8 +314,9 @@ export function DebugDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { retrieval, prompt, curation, reasoning, tools, compaction, errors, usage } =
-    collect(message.parts);
+  const { retrieval, prompt, curation, steps, compaction, errors, usage } = collect(
+    message.parts,
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -353,7 +358,7 @@ export function DebugDialog({
             ) : null}
           </Section>
         ) : null}
-        {prompt || reasoning.length > 0 ? (
+        {prompt || steps.length > 0 ? (
           <Section
             title="Chat"
             summary={
@@ -363,12 +368,9 @@ export function DebugDialog({
             }
           >
             {prompt ? <TextBlock label="Prompt" text={prompt} /> : null}
-            {[...tools.entries()].map(([index, { label, text }]) => (
-              <TextBlock key={index} label={label} text={text} />
+            {[...steps.entries()].map(([index, { label, text }]) => (
+              <TextBlock key={index} label={`${index + 1}. ${label}`} text={text} />
             ))}
-            {reasoning.length > 0 ? (
-              <TextBlock label="Reasoning" text={reasoning.join("\n\n")} />
-            ) : null}
           </Section>
         ) : null}
         {curation ? (
