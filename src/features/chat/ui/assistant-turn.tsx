@@ -46,6 +46,20 @@ function duration(ms: number) {
   return `${Math.round(seconds / 60)} minutes`;
 }
 
+function DotGrid() {
+  return (
+    <span className="grid size-4 grid-cols-3 place-content-center gap-0.5">
+      {Array.from({ length: 9 }, (_, i) => (
+        <span
+          key={i}
+          className="size-[3px] animate-dot-grid rounded-full bg-foreground"
+          style={{ animationDelay: `${((i % 3) + Math.floor(i / 3)) * 0.12}s` }}
+        />
+      ))}
+    </span>
+  );
+}
+
 function Step({
   icon,
   running = false,
@@ -57,7 +71,7 @@ function Step({
 }) {
   return (
     <Marker>
-      <MarkerIcon>{running ? <Spinner /> : icon}</MarkerIcon>
+      <MarkerIcon>{running ? <DotGrid /> : icon}</MarkerIcon>
       <MarkerContent className={cn("truncate", running && "shimmer")}>
         {children}
       </MarkerContent>
@@ -91,7 +105,7 @@ function ToolStep({
   return (
     <Collapsible>
       <StepTrigger>
-        <MarkerIcon>{running ? <Spinner /> : icon}</MarkerIcon>
+        <MarkerIcon>{running ? <DotGrid /> : icon}</MarkerIcon>
         <MarkerContent className={cn("truncate", running && "shimmer")}>
           {children}
         </MarkerContent>
