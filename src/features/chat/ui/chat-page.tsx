@@ -10,12 +10,13 @@ import {
   steerChat,
   stopChat,
 } from "@/features/chat/server/functions";
-import type {
-  ChatModel,
-  ChatSettings,
-  Conversation,
-  RemanenceUIMessage,
-  Memory,
+import {
+  messageText,
+  type ChatModel,
+  type ChatSettings,
+  type Conversation,
+  type RemanenceUIMessage,
+  type Memory,
 } from "@/shared/lib/remanence";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import {
@@ -30,7 +31,7 @@ import {
 import { AssistantTurn } from "./assistant-turn";
 import { Composer } from "./composer";
 import { PageHeader } from "./page-header";
-import { UserTurn } from "./user-turn";
+import { UserBubble } from "./user-bubble";
 
 let browserChat: Chat<RemanenceUIMessage> | undefined;
 
@@ -165,7 +166,7 @@ export function ChatPage({
       <MessageScrollerProvider autoScroll>
         <MessageScroller className="flex-1">
           <MessageScrollerViewport className="[--scroll-fade-t-size:--spacing(16)]">
-            <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-10 px-6 pt-18 pb-24">
+            <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-6 px-6 pt-18 pb-24">
               {messages.map((message) => (
                 <MessageScrollerItem
                   key={message.id}
@@ -174,7 +175,7 @@ export function ChatPage({
                   className="-mx-4 -my-2 px-4 py-2"
                 >
                   {message.role === "user" ? (
-                    <UserTurn message={message} />
+                    <UserBubble text={messageText(message.parts)} />
                   ) : (
                     <AssistantTurn
                       message={message}

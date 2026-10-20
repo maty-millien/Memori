@@ -1,4 +1,4 @@
-import { IconAlertCircle, IconChevronRight, IconScanTraces } from "@tabler/icons-react";
+import { IconAlertCircle, IconChevronRight } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 
 import { formatDate, formatNumber, formatSeconds } from "@/shared/lib/format";
@@ -14,7 +14,6 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { Badge } from "@/shared/ui/badge";
-import { Button } from "@/shared/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -26,7 +25,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/shared/ui/dialog";
 import {
   Table,
@@ -36,7 +34,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 type Part = RemanenceUIMessage["parts"][number];
 type DataPart<T extends Part["type"]> = Extract<Part, { type: T; data: unknown }>["data"];
@@ -50,12 +47,47 @@ const SCORE_COLUMNS = [
   ["total", "Total"],
 ] as const;
 
+function toolStep(part: Part) {
+  switch (part.type) {
+    case "data-command":
+      return {
+        label: `Command (exit code ${part.data.exitCode})`,
+        text: `${part.data.command}\n\n${part.data.output || "No output"}`,
+      };
+    case "data-search":
+      return part.data.url
+        ? { label: "Opened a page", text: part.data.url }
+        : { label: "Web search", text: part.data.query };
+    case "data-read":
+      return { label: "Read a file", text: part.data.path };
+    case "data-recall":
+      return { label: "Searched earlier messages", text: part.data.query };
+    case "data-patch":
+      return { label: "Patch", text: `${part.data.patch}\n\n${part.data.output}` };
+    case "data-question":
+      return {
+        label: "Question",
+        text: part.data.questions
+          .map(
+            (question, index) =>
+              `${question.question}\n-> ${part.data.answers?.[index]?.join(", ") || "Unanswered"}`,
+          )
+          .join("\n\n"),
+      };
+    case "data-schedule":
+      return { label: `Scheduled for ${formatDate(part.data.at)}`, text: part.data.note };
+    default:
+      return null;
+  }
+}
+
 function collect(parts: Part[]) {
   const trace = {
     retrieval: undefined as DataPart<"data-retrieval"> | undefined,
     prompt: undefined as string | undefined,
     curation: undefined as DataPart<"data-curation"> | undefined,
     reasoning: [] as string[],
+    tools: parts.flatMap((part) => toolStep(part) ?? []),
     compaction: undefined as DataPart<"data-compaction"> | undefined,
     errors: [] as string[],
     usage: undefined as DataPart<"data-usage"> | undefined,
@@ -269,36 +301,20 @@ function OperationTable({
   );
 }
 
-export function DebugDialog({ message }: { message: RemanenceUIMessage }) {
-  const { retrieval, prompt, curation, reasoning, compaction, errors, usage } = collect(
-    message.parts,
-  );
-  const failed = errors.length > 0;
+export function DebugDialog({
+  message,
+  open,
+  onOpenChange,
+}: {
+  message: RemanenceUIMessage;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { retrieval, prompt, curation, reasoning, tools, compaction, errors, usage } =
+    collect(message.parts);
 
   return (
-    <Dialog>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <DialogTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Details"
-                  className={cn(
-                    "text-muted-foreground hover:text-foreground",
-                    failed && "text-destructive hover:text-destructive",
-                  )}
-                />
-              }
-            />
-          }
-        >
-          <IconScanTraces className="size-5" stroke={1.75} />
-        </TooltipTrigger>
-        <TooltipContent>Details</TooltipContent>
-      </Tooltip>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>Turn details</DialogTitle>
@@ -347,6 +363,9 @@ export function DebugDialog({ message }: { message: RemanenceUIMessage }) {
             }
           >
             {prompt ? <TextBlock label="Prompt" text={prompt} /> : null}
+            {[...tools.entries()].map(([index, { label, text }]) => (
+              <TextBlock key={index} label={label} text={text} />
+            ))}
             {reasoning.length > 0 ? (
               <TextBlock label="Reasoning" text={reasoning.join("\n\n")} />
             ) : null}
