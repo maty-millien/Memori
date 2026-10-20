@@ -92,7 +92,7 @@ type RemanenceData = {
     latest: Conversation[];
     relevant: Conversation[];
   };
-  prompt: { prompt: string };
+  prompt: { prompt: string; injected: string[] };
   thought: { ms: number };
   command: { command: string; running: boolean; exitCode: number | null; output: string };
   search: { query: string; url?: string; running: boolean };

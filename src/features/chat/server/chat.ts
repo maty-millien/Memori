@@ -183,28 +183,30 @@ export function chatResponse(messageId: string, userText: string) {
       const seen = new Set(
         history.flatMap((message) =>
           message.parts.flatMap((part) =>
-            part.type === "data-retrieval"
-              ? [
-                  ...part.data.memories.map((item) => memoryKey(item.memory)),
-                  ...[...part.data.latest, ...part.data.relevant].map(conversationKey),
-                ]
-              : [],
+            part.type === "data-prompt" ? part.data.injected : [],
           ),
         ),
       );
       const unseen = <T>(entries: T[], key: (entry: T) => string) =>
         entries.filter((entry) => !seen.has(key(entry)));
+      const memories = unseen(
+        retrieval.memories.map((item) => item.memory),
+        memoryKey,
+      );
+      const latest = unseen(retrieval.latest, conversationKey);
+      const relevant = unseen(retrieval.relevant, conversationKey);
       const prompt = buildContextPrompt(
         timestampedUserContent(body, createdAt),
-        unseen(
-          retrieval.memories.map((item) => item.memory),
-          memoryKey,
-        ),
-        unseen(retrieval.latest, conversationKey),
-        unseen(retrieval.relevant, conversationKey),
+        memories,
+        latest,
+        relevant,
       );
+      const injected = [
+        ...memories.map(memoryKey),
+        ...[...latest, ...relevant].map(conversationKey),
+      ];
       writer.write({ type: "data-retrieval", data: retrieval });
-      writer.write({ type: "data-prompt", data: { prompt } });
+      writer.write({ type: "data-prompt", data: { prompt, injected } });
 
       const userItem: Item = {
         type: "message",
