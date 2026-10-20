@@ -1,4 +1,5 @@
 import {
+  IconAlarm,
   IconBrain,
   IconCheck,
   IconChevronRight,
@@ -16,6 +17,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { sendAnswers } from "@/features/chat/server/functions";
+import { formatDate } from "@/shared/lib/format";
 import {
   messageText,
   type RemanenceUIMessage,
@@ -278,6 +280,16 @@ function TimelinePart({ part }: { part: Part }) {
       ) : (
         <QuestionCard id={part.id ?? ""} questions={part.data.questions} />
       );
+    case "data-schedule":
+      return (
+        <ToolStep
+          icon={<IconAlarm />}
+          running={false}
+          details={[{ label: formatDate(part.data.at), text: part.data.note }]}
+        >
+          Scheduled a message
+        </ToolStep>
+      );
     case "data-steer":
       return (
         <Bubble variant="secondary" align="end" className="max-w-[70%] self-end">
@@ -351,6 +363,7 @@ function isStep(part: Part) {
     part.type === "data-read" ||
     part.type === "data-recall" ||
     part.type === "data-patch" ||
+    part.type === "data-schedule" ||
     part.type === "data-question"
   );
 }

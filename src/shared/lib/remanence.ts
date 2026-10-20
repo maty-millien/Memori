@@ -100,6 +100,7 @@ type RemanenceData = {
   recall: { query: string; running: boolean };
   patch: { patch: string; running: boolean; output: string };
   question: { questions: Question[]; answers: string[][] | null };
+  schedule: { at: string; note: string };
   steer: { text: string };
   stopped: Record<string, never>;
   curation: { prompt: string; operations: MemoryOperation[] };

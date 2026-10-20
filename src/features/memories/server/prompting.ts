@@ -88,6 +88,9 @@ function assistantLines(message: RemanenceUIMessage) {
           `[asked] ${question.question} -> user answered: ${part.data.answers?.[index]?.join(", ") || "nothing"}`,
       );
     }
+    if (part.type === "data-schedule") {
+      return [`[scheduled for ${localIso(new Date(part.data.at))}] ${part.data.note}`];
+    }
     if (part.type === "data-read") {
       return [`[read] ${part.data.path}`];
     }

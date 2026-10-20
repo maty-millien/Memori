@@ -63,6 +63,11 @@ db.exec(`
     message_id TEXT PRIMARY KEY,
     items TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS wakeups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at TEXT NOT NULL,
+    note TEXT
+  );
 `);
 
 const memoryRow = z
@@ -265,7 +270,7 @@ export function markAccessed(ids: string[]) {
 
 export function resetDatabase() {
   db.exec(
-    "DELETE FROM memories; DELETE FROM conversations; DELETE FROM archived_turns; INSERT INTO archived_turns_fts (archived_turns_fts) VALUES ('delete-all'); DELETE FROM messages; DELETE FROM settings; DELETE FROM thread_items; DELETE FROM sqlite_sequence;",
+    "DELETE FROM memories; DELETE FROM conversations; DELETE FROM archived_turns; INSERT INTO archived_turns_fts (archived_turns_fts) VALUES ('delete-all'); DELETE FROM messages; DELETE FROM settings; DELETE FROM thread_items; DELETE FROM wakeups; DELETE FROM sqlite_sequence;",
   );
 }
 
@@ -326,6 +331,32 @@ export function getThreadItems(messageId: string): unknown {
     .prepare("SELECT items FROM thread_items WHERE message_id = ?")
     .get(messageId);
   return row ? JSON.parse(z.object({ items: z.string() }).parse(row).items) : undefined;
+}
+
+const wakeupRow = z.object({
+  id: z.number(),
+  at: z.string(),
+  note: z.string().nullable(),
+});
+
+export function insertWakeup(at: string, note: string) {
+  db.prepare("INSERT INTO wakeups (at, note) VALUES (?, ?)").run(at, note);
+}
+
+export function scheduleCheckIn(at: string) {
+  db.exec("DELETE FROM wakeups WHERE note IS NULL");
+  db.prepare("INSERT INTO wakeups (at, note) VALUES (?, NULL)").run(at);
+}
+
+export function dueWakeup() {
+  const row = db
+    .prepare("SELECT id, at, note FROM wakeups WHERE at <= ? ORDER BY at LIMIT 1")
+    .get(new Date().toISOString());
+  return row ? wakeupRow.parse(row) : undefined;
+}
+
+export function deleteWakeup(id: number) {
+  db.prepare("DELETE FROM wakeups WHERE id = ?").run(id);
 }
 
 function getSetting(key: string) {

@@ -12,9 +12,10 @@ import { embedOne } from "@/features/memories/server/embeddings";
 import {
   buildContextPrompt,
   formatMemories,
+  localIso,
   timestampedUserContent,
+  timezone,
   transcript,
-  userContent,
   wrap,
 } from "@/features/memories/server/prompting";
 import { recall, retrieve } from "@/features/memories/server/retrieval";
@@ -35,14 +36,18 @@ import {
   type Tool,
 } from "@/shared/server/codex";
 import {
+  deleteWakeup,
+  dueWakeup,
   getThreadItems,
+  insertWakeup,
   listLiveMessages,
   saveMessage,
   saveThreadItems,
+  scheduleCheckIn,
   updateMessageParts,
 } from "@/shared/server/db";
 
-import { CHAT_PROMPT, PATCH_DESCRIPTION, QUESTION_DESCRIPTION } from "./prompts";
+import { CHAT_PROMPT, PATCH_DESCRIPTION, QUESTION_DESCRIPTION, SILENT } from "./prompts";
 import {
   applyPatch,
   read,
@@ -55,15 +60,68 @@ import {
 
 type Chunk = InferUIMessageChunk<RemanenceUIMessage>;
 
-let activeTurn: {
-  userMessage: RemanenceUIMessage;
-  chunks: Chunk[];
-  followers: Set<ReadableStreamDefaultController<Chunk>>;
+type Turn = {
   controller: AbortController;
   steer: ((text: string) => void) | null;
-} | null = null;
+};
+
+type Wakeup = NonNullable<ReturnType<typeof dueWakeup>>;
+
+let activeTurn:
+  | (Turn & {
+      userMessage: RemanenceUIMessage;
+      chunks: Chunk[];
+      followers: Set<ReadableStreamDefaultController<Chunk>>;
+    })
+  | null = null;
+
+let wakeTurn: Turn | null = null;
 
 let postTurn = Promise.resolve();
+
+const CHECK_IN_MS = 6 * 60 * 60 * 1000;
+
+const listeners = new Set<() => void>();
+
+export function eventsResponse() {
+  let listener: () => void;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      listener = () => controller.enqueue(new TextEncoder().encode("data: message\n\n"));
+      listeners.add(listener);
+      controller.enqueue(new TextEncoder().encode(": connected\n\n"));
+    },
+    cancel() {
+      listeners.delete(listener);
+    },
+  });
+  return new Response(stream, {
+    headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+  });
+}
+
+function wake() {
+  if (activeTurn || wakeTurn) {
+    return;
+  }
+  const wakeup = dueWakeup();
+  if (!wakeup) {
+    return;
+  }
+  const now = localIso(new Date());
+  const turn: Turn = { controller: new AbortController(), steer: null };
+  wakeTurn = turn;
+  void runTurn(turn, {
+    content: wakeup.note
+      ? `<wakeup datetime="${now}" timezone="${timezone()}" scheduled_for="${localIso(new Date(wakeup.at))}">\n${wakeup.note}\n</wakeup>`
+      : `<wakeup datetime="${now}" timezone="${timezone()}" />`,
+    topic: wakeup.note ?? "",
+    userMessage: null,
+    wakeup,
+  }).pipeTo(new WritableStream());
+}
+
+setInterval(wake, 60_000);
 
 export const activeUserMessage = () => activeTurn?.userMessage;
 
@@ -127,6 +185,7 @@ function seedItems(history: RemanenceUIMessage[]) {
 }
 
 export function chatResponse(messageId: string, userText: string) {
+  wakeTurn?.controller.abort();
   const createdAt = new Date();
   const userMessage: RemanenceUIMessage = {
     id: messageId,
@@ -134,8 +193,6 @@ export function chatResponse(messageId: string, userText: string) {
     parts: [{ type: "text", text: userText }],
     metadata: { createdAt: createdAt.toISOString() },
   };
-  let items: Item[] | null = null;
-  let finishTurn: ((message: RemanenceUIMessage) => Promise<void>) | null = null;
   const turn: NonNullable<typeof activeTurn> = {
     userMessage,
     chunks: [],
@@ -144,9 +201,47 @@ export function chatResponse(messageId: string, userText: string) {
     steer: null,
   };
   activeTurn = turn;
+  const stream = runTurn(turn, {
+    content: timestampedUserContent(userText, createdAt),
+    topic: userText,
+    userMessage,
+    wakeup: null,
+  });
+
+  void (async () => {
+    for await (const chunk of stream) {
+      turn.chunks.push(chunk);
+      for (const follower of turn.followers) {
+        follower.enqueue(chunk);
+      }
+    }
+    for (const follower of turn.followers) {
+      follower.close();
+    }
+  })();
+  return resumeResponse();
+}
+
+function runTurn(
+  turn: Turn,
+  {
+    content,
+    topic,
+    userMessage,
+    wakeup,
+  }: {
+    content: string;
+    topic: string;
+    userMessage: RemanenceUIMessage | null;
+    wakeup: Wakeup | null;
+  },
+) {
+  let items: Item[] | null = null;
+  let silent = false;
+  let finishTurn: ((message: RemanenceUIMessage) => Promise<void>) | null = null;
   const { signal } = turn.controller;
 
-  const stream = createUIMessageStream<RemanenceUIMessage>({
+  return createUIMessageStream<RemanenceUIMessage>({
     onError: errorMessage,
     execute: async ({ writer }) => {
       writer.write({ type: "start" });
@@ -169,10 +264,9 @@ export function chatResponse(messageId: string, userText: string) {
       const { models, settings: chatSettings } = await chatOptions();
       const images =
         models.find((model) => model.id === chatSettings.model)?.images ?? false;
-      const body = userContent(userMessage);
       const retrievalQuery = [
         ...history.slice(-2).map((message) => messageText(message.parts).slice(-500)),
-        body,
+        topic,
       ].join("\n\n");
       const retrievalStarted = performance.now();
       const { live, ...retrieval } = retrieve(
@@ -195,12 +289,7 @@ export function chatResponse(messageId: string, userText: string) {
       );
       const latest = unseen(retrieval.latest, conversationKey);
       const relevant = unseen(retrieval.relevant, conversationKey);
-      const prompt = buildContextPrompt(
-        timestampedUserContent(body, createdAt),
-        memories,
-        latest,
-        relevant,
-      );
+      const prompt = buildContextPrompt(content, memories, latest, relevant);
       const injected = [
         ...memories.map(memoryKey),
         ...[...latest, ...relevant].map(conversationKey),
@@ -473,6 +562,42 @@ export function chatResponse(messageId: string, userText: string) {
           return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`;
         },
       };
+      const scheduleTool: Tool = {
+        definition: {
+          type: "function",
+          name: "schedule",
+          description:
+            "Schedule a moment to write to the user first, without waiting for them: a follow-up on an event they mentioned, a reminder before it, or a reminder they asked for. Call it on your own initiative whenever the user mentions something with a time or an outcome. At that time you get a <wakeup> with your note, and you decide then what to send, if anything.",
+          strict: true,
+          parameters: {
+            type: "object",
+            properties: {
+              at: {
+                type: "string",
+                description:
+                  "When to wake up, as an ISO 8601 datetime with a timezone offset",
+              },
+              note: {
+                type: "string",
+                description:
+                  "What to do then, written for yourself with the context you'll need",
+              },
+            },
+            required: ["at", "note"],
+            additionalProperties: false,
+          },
+        },
+        run: async (args, callId) => {
+          const { at, note } = z
+            .object({ at: z.iso.datetime({ offset: true }), note: z.string() })
+            .parse(JSON.parse(args));
+          thought();
+          writer.write({ type: "data-schedule", id: callId, data: { at, note } });
+          insertWakeup(new Date(at).toISOString(), note);
+          since = performance.now();
+          return `Scheduled for ${localIso(new Date(at))}.`;
+        },
+      };
       const threadItems: Item[] = [];
       const reply = await runAgent(
         {
@@ -480,7 +605,14 @@ export function chatResponse(messageId: string, userText: string) {
           input: [...seedItems(history), userItem],
           model: chatSettings.model,
           effort: chatSettings.effort,
-          tools: [shellTool, readTool, recallTool, patchTool, questionTool],
+          tools: [
+            shellTool,
+            readTool,
+            recallTool,
+            patchTool,
+            scheduleTool,
+            ...(wakeup ? [] : [questionTool]),
+          ],
           webSearch: true,
           steer: drain,
           signal,
@@ -555,6 +687,9 @@ export function chatResponse(messageId: string, userText: string) {
         return null;
       });
       turn.steer = null;
+      if (!reply && wakeup) {
+        return;
+      }
       if (!reply) {
         writer.write({ type: "data-stopped", data: {} });
         writer.write({ type: "finish" });
@@ -593,30 +728,35 @@ export function chatResponse(messageId: string, userText: string) {
       });
       writer.write({ type: "finish" });
       items = [userItem, ...reply.items];
+      silent = wakeup !== null && reply.text.trim() === SILENT;
       finishTurn = async (message) => {
         const parts: RemanenceUIMessage["parts"] = [];
         let curationUsage: CallUsage | null = null;
-        const curationPrompt = [
-          wrap(
-            "relevant_memories",
-            formatMemories([...retrieval.memories.map((item) => item.memory), ...live]) ||
-              "(none)",
-          ),
-          wrap(
-            "previous_messages",
-            transcript(history.slice(-SETTINGS.curationPreviousMessages)) || "(none)",
-          ),
-          wrap("latest_turn", transcript([userMessage, message])),
-        ].join("\n\n");
-        try {
-          const curation = await curate(curationPrompt);
-          curationUsage = curation.usage;
-          parts.push({
-            type: "data-curation",
-            data: { prompt: curationPrompt, operations: curation.operations },
-          });
-        } catch (error) {
-          parts.push({ type: "data-error", data: { message: errorMessage(error) } });
+        if (userMessage) {
+          const curationPrompt = [
+            wrap(
+              "relevant_memories",
+              formatMemories([
+                ...retrieval.memories.map((item) => item.memory),
+                ...live,
+              ]) || "(none)",
+            ),
+            wrap(
+              "previous_messages",
+              transcript(history.slice(-SETTINGS.curationPreviousMessages)) || "(none)",
+            ),
+            wrap("latest_turn", transcript([userMessage, message])),
+          ].join("\n\n");
+          try {
+            const curation = await curate(curationPrompt);
+            curationUsage = curation.usage;
+            parts.push({
+              type: "data-curation",
+              data: { prompt: curationPrompt, operations: curation.operations },
+            });
+          } catch (error) {
+            parts.push({ type: "data-error", data: { message: errorMessage(error) } });
+          }
         }
 
         if (reply.context > CONTEXT_WINDOW) {
@@ -641,33 +781,38 @@ export function chatResponse(messageId: string, userText: string) {
       };
     },
     onEnd: ({ responseMessage }) => {
-      activeTurn = null;
+      if (wakeup) {
+        wakeTurn = null;
+      } else {
+        activeTurn = null;
+      }
       if (!items) {
         return;
       }
-      saveMessage(userMessage);
+      if (wakeup) {
+        deleteWakeup(wakeup.id);
+      }
+      scheduleCheckIn(new Date(Date.now() + CHECK_IN_MS).toISOString());
+      if (silent) {
+        return;
+      }
+      if (userMessage) {
+        saveMessage(userMessage);
+      }
       const message = {
         ...responseMessage,
         metadata: { createdAt: new Date().toISOString() },
       };
       saveMessage(message);
       saveThreadItems(responseMessage.id, items);
+      if (wakeup) {
+        for (const listener of listeners) {
+          listener();
+        }
+      }
       if (finishTurn) {
         postTurn = finishTurn(message).catch(() => {});
       }
     },
   });
-
-  void (async () => {
-    for await (const chunk of stream) {
-      turn.chunks.push(chunk);
-      for (const follower of turn.followers) {
-        follower.enqueue(chunk);
-      }
-    }
-    for (const follower of turn.followers) {
-      follower.close();
-    }
-  })();
-  return resumeResponse();
 }

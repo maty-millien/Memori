@@ -4,7 +4,12 @@ import { useRouter, type AnyRouter } from "@tanstack/react-router";
 import { DefaultChatTransport } from "ai";
 import { useEffect, useRef, useState } from "react";
 
-import { saveChatSettings, steerChat, stopChat } from "@/features/chat/server/functions";
+import {
+  getMessages,
+  saveChatSettings,
+  steerChat,
+  stopChat,
+} from "@/features/chat/server/functions";
 import type {
   ChatModel,
   ChatSettings,
@@ -78,9 +83,18 @@ export function ChatPage({
   const router = useRouter();
   const [chatSettings, setChatSettings] = useState(initialChatSettings);
   const [chat] = useState(() => getChat(initialMessages, router));
-  const { messages, sendMessage, status, error } = useChat({ chat, resume: true });
+  const { messages, sendMessage, setMessages, status, error } = useChat({
+    chat,
+    resume: true,
+  });
   const busy = status === "submitted" || status === "streaming";
   const queued = useRef<string[]>([]);
+
+  useEffect(() => {
+    const events = new EventSource("/api/events");
+    events.addEventListener("message", () => void getMessages().then(setMessages));
+    return () => events.close();
+  }, [setMessages]);
 
   useEffect(() => {
     if (!busy && queued.current.length > 0) {
