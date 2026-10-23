@@ -2,7 +2,7 @@
 
 ## Description
 
-Remanence is a local research app for long-term agent memory, built around a single endless chat. The server runs its own agent loop against the Codex Responses endpoint with the Codex CLI login. Each turn injects relevant memories and past conversations, a separate call curates the memories afterwards, and old messages are compacted once the context grows too large. The agent can also write first through scheduled wakeups. `docs/README.md` describes the full flow of a turn.
+Remanence is a local research app for long-term agent memory, built around a single endless chat. The server runs the agent loop with the AI SDK against the Codex Responses endpoint, using the Codex CLI login. Each turn injects relevant memories and past conversations, a separate call curates the memories afterwards, and old messages are compacted once the context grows too large. The agent can also write first through scheduled wakeups. `docs/README.md` describes the full flow of a turn.
 
 ## Project rules
 

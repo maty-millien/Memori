@@ -1,7 +1,8 @@
+import { Output } from "ai";
 import { z } from "zod";
 
 import { IMPORTANCES, SCOPES, type MemoryOperation } from "@/shared/lib/remanence";
-import { runOnce } from "@/shared/server/codex";
+import { runOnce, tokenUsage } from "@/shared/server/codex";
 import { deleteMemory, getMemory, insertMemory, updateMemory } from "@/shared/server/db";
 
 import { embedOne } from "./embeddings";
@@ -113,13 +114,17 @@ async function apply({ action, memory_id, content, scope, importance }: Operatio
 
 export async function curate(prompt: string) {
   const started = performance.now();
-  const { text, usage } = await runOnce(CURATION_PROMPT, prompt, z.toJSONSchema(output));
+  const result = runOnce(CURATION_PROMPT, prompt, Output.object({ schema: output }));
   const operations: MemoryOperation[] = await Promise.all(
-    output
-      .parse(JSON.parse(text))
-      .operations.map(async (operation) =>
-        Object.assign(operation, { result: await apply(operation) }),
-      ),
+    (await result.output).operations.map(async (operation) =>
+      Object.assign(operation, { result: await apply(operation) }),
+    ),
   );
-  return { operations, usage: { ...usage, ms: Math.round(performance.now() - started) } };
+  return {
+    operations,
+    usage: {
+      ...tokenUsage(await result.totalUsage),
+      ms: Math.round(performance.now() - started),
+    },
+  };
 }

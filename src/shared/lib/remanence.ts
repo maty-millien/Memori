@@ -95,7 +95,7 @@ type RemanenceData = {
   prompt: { prompt: string; injected: string[] };
   thought: { ms: number };
   command: { command: string; running: boolean; exitCode: number | null; output: string };
-  search: { query: string; url?: string; running: boolean };
+  search: { query: string; url?: string | null; running: boolean };
   read: { path: string; running: boolean };
   recall: { query: string; running: boolean };
   patch: { patch: string; running: boolean; output: string };

@@ -126,14 +126,16 @@ export function read(
     }
     const bytes = readFileSync(file);
     const mediaType = MEDIA_TYPES[extname(file).toLowerCase()];
-    const data = `data:${mediaType};base64,${bytes.toString("base64")}`;
-    if (mediaType === "application/pdf") {
-      return [{ type: "input_file", filename: basename(file), file_data: data }];
+    if (mediaType && (images || mediaType === "application/pdf")) {
+      return {
+        type: "file" as const,
+        data: { type: "data" as const, data: bytes.toString("base64") },
+        mediaType,
+        filename: basename(file),
+      };
     }
     if (mediaType) {
-      return images
-        ? [{ type: "input_image", image_url: data }]
-        : "The current model can't view images.";
+      return "The current model can't view images.";
     }
     if (bytes.subarray(0, 8192).includes(0)) {
       return `Cannot read binary file: ${file}`;

@@ -1,7 +1,11 @@
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
+  modelMessageSchema,
+  streamText,
+  tool,
   type InferUIMessageChunk,
+  type ModelMessage,
 } from "ai";
 import { z } from "zod";
 
@@ -28,13 +32,7 @@ import {
   type RemanenceUIMessage,
   type Question,
 } from "@/shared/lib/remanence";
-import {
-  chatOptions,
-  itemSchema,
-  runAgent,
-  type Item,
-  type Tool,
-} from "@/shared/server/codex";
+import { chatOptions, codex, codexOptions, tokenUsage } from "@/shared/server/codex";
 import {
   deleteWakeup,
   dueWakeup,
@@ -138,10 +136,17 @@ export function steerTurn(text: string) {
 }
 
 const questionSchema = z.object({
-  question: z.string(),
-  header: z.string(),
-  options: z.array(z.object({ label: z.string(), description: z.string() })),
-  multiple: z.boolean(),
+  question: z.string().describe("Complete question"),
+  header: z.string().describe("Very short label (max 30 chars)"),
+  options: z
+    .array(
+      z.object({
+        label: z.string().describe("Display text (1-5 words, concise)"),
+        description: z.string().describe("Explanation of choice"),
+      }),
+    )
+    .describe("Available choices"),
+  multiple: z.boolean().describe("Allow selecting multiple choices"),
 }) satisfies z.ZodType<Question>;
 
 const pendingQuestions = new Map<string, (answers: string[][]) => void>();
@@ -178,10 +183,10 @@ const memoryKey = (memory: Memory) => `${memory.id}@${memory.updatedAt}`;
 
 const conversationKey = (conversation: Conversation) => `conversation:${conversation.id}`;
 
-function seedItems(history: RemanenceUIMessage[]) {
+function seedMessages(history: RemanenceUIMessage[]) {
   return history
     .filter((message) => message.role !== "user")
-    .flatMap((message) => z.array(itemSchema).parse(getThreadItems(message.id) ?? []));
+    .flatMap((message) => z.array(modelMessageSchema).parse(getThreadItems(message.id)));
 }
 
 export function chatResponse(messageId: string, userText: string) {
@@ -236,7 +241,7 @@ function runTurn(
     wakeup: Wakeup | null;
   },
 ) {
-  let items: Item[] | null = null;
+  let items: ModelMessage[] | null = null;
   let silent = false;
   let finishTurn: ((message: RemanenceUIMessage) => Promise<void>) | null = null;
   const { signal } = turn.controller;
@@ -253,12 +258,9 @@ function runTurn(
         writer.write({ type: "data-steer", data: { text } });
       };
       const drain = () =>
-        inbox.splice(0).map((text): Item => ({
-          type: "message",
+        inbox.splice(0).map((text): ModelMessage => ({
           role: "user",
-          content: [
-            { type: "input_text", text: timestampedUserContent(text, new Date()) },
-          ],
+          content: timestampedUserContent(text, new Date()),
         }));
 
       const { models, settings: chatSettings } = await chatOptions();
@@ -297,11 +299,7 @@ function runTurn(
       writer.write({ type: "data-retrieval", data: retrieval });
       writer.write({ type: "data-prompt", data: { prompt, injected } });
 
-      const userItem: Item = {
-        type: "message",
-        role: "user",
-        content: [{ type: "input_text", text: prompt }],
-      };
+      const userInput: ModelMessage = { role: "user", content: prompt };
       const chatStarted = performance.now();
       let since: number | null = chatStarted;
       const thought = () => {
@@ -313,405 +311,319 @@ function runTurn(
           since = null;
         }
       };
-      const shellTool: Tool = {
-        definition: {
-          type: "function",
-          name: "shell",
+      const tools = {
+        web_search: codex.tools.webSearch({}),
+        shell: tool({
           description: `Run a command with ${SHELL_PATH} on the machine and return its combined output. Quote file paths containing spaces or special characters. When output is large, the full result is saved to a file and the last ${SHELL_MAX_LINES} lines are returned.`,
           strict: true,
-          parameters: {
-            type: "object",
-            properties: {
-              command: { type: "string", description: "Shell command string to execute" },
-              workdir: {
-                type: ["string", "null"],
-                description:
-                  "Working directory to execute the command in. Defaults to the user's home directory. Set it here instead of changing directories in the command.",
-              },
-              timeout: {
-                type: ["integer", "null"],
-                description: `Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to ${SHELL_TIMEOUT_MS}.`,
-              },
-            },
-            required: ["command", "workdir", "timeout"],
-            additionalProperties: false,
+          inputSchema: z.object({
+            command: z.string().describe("Shell command string to execute"),
+            workdir: z
+              .string()
+              .nullable()
+              .describe(
+                "Working directory to execute the command in. Defaults to the user's home directory. Set it here instead of changing directories in the command.",
+              ),
+            timeout: z
+              .number()
+              .int()
+              .nonnegative()
+              .nullable()
+              .describe(
+                `Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to ${SHELL_TIMEOUT_MS}.`,
+              ),
+          }),
+          execute: async ({ command, workdir, timeout }, { toolCallId }) => {
+            const data = { command, running: true, exitCode: null, output: "" };
+            thought();
+            writer.write({ type: "data-command", id: toolCallId, data });
+            const result = await shell(command, workdir, timeout, signal);
+            writer.write({
+              type: "data-command",
+              id: toolCallId,
+              data: { ...data, running: false, ...result },
+            });
+            since = performance.now();
+            return result.output;
           },
-        },
-        run: async (args, callId) => {
-          const { command, workdir, timeout } = z
-            .object({
-              command: z.string(),
-              workdir: z.string().nullable(),
-              timeout: z.number().int().nonnegative().nullable(),
-            })
-            .parse(JSON.parse(args));
-          const data = { command, running: true, exitCode: null, output: "" };
-          thought();
-          writer.write({ type: "data-command", id: callId, data });
-          const result = await shell(command, workdir, timeout, signal);
-          writer.write({
-            type: "data-command",
-            id: callId,
-            data: { ...data, running: false, ...result },
-          });
-          since = performance.now();
-          return result.output;
-        },
-      };
-      const readTool: Tool = {
-        definition: {
-          type: "function",
-          name: "read",
+        }),
+        read: tool({
           description: `Read a file or directory on the machine. Supports text files, images, and PDFs; images and PDFs are shown to you directly. Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is not part of the file content. Directory entries are returned one per line. Use offset and limit to read large files in sections. Prefer one larger read over many small slices.`,
           strict: true,
-          parameters: {
-            type: "object",
-            properties: {
-              path: {
-                type: "string",
-                description:
-                  "File or directory to read, absolute or relative to the user's home directory",
-              },
-              offset: {
-                type: ["integer", "null"],
-                description:
-                  "The line or directory entry to start reading from (1-based)",
-              },
-              limit: {
-                type: ["integer", "null"],
-                description: `The maximum number of lines or directory entries to read (defaults to and capped at ${READ_MAX_LINES})`,
-              },
-            },
-            required: ["path", "offset", "limit"],
-            additionalProperties: false,
+          inputSchema: z.object({
+            path: z
+              .string()
+              .describe(
+                "File or directory to read, absolute or relative to the user's home directory",
+              ),
+            offset: z
+              .number()
+              .int()
+              .nullable()
+              .describe("The line or directory entry to start reading from (1-based)"),
+            limit: z
+              .number()
+              .int()
+              .positive()
+              .nullable()
+              .describe(
+                `The maximum number of lines or directory entries to read (defaults to and capped at ${READ_MAX_LINES})`,
+              ),
+          }),
+          execute: async ({ path, offset, limit }, { toolCallId }) => {
+            thought();
+            writer.write({
+              type: "data-read",
+              id: toolCallId,
+              data: { path, running: true },
+            });
+            const result = read(path, offset, limit, images);
+            writer.write({
+              type: "data-read",
+              id: toolCallId,
+              data: { path, running: false },
+            });
+            since = performance.now();
+            return result;
           },
-        },
-        run: async (args, callId) => {
-          const { path, offset, limit } = z
-            .object({
-              path: z.string(),
-              offset: z.number().int().nullable(),
-              limit: z.number().int().positive().nullable(),
-            })
-            .parse(JSON.parse(args));
-          thought();
-          writer.write({ type: "data-read", id: callId, data: { path, running: true } });
-          const result = read(path, offset, limit, images);
-          writer.write({ type: "data-read", id: callId, data: { path, running: false } });
-          since = performance.now();
-          return result;
-        },
-      };
-      const recallTool: Tool = {
-        definition: {
-          type: "function",
-          name: "recall",
+          toModelOutput: ({ output }) =>
+            typeof output === "string"
+              ? { type: "text", value: output }
+              : { type: "content", value: [output] },
+        }),
+        recall: tool({
           description:
             "Search the earlier parts of this conversation that are no longer in the chat history. Returns the most relevant past exchanges, each with its date. Matches both meaning and exact words, so include specific names, paths, or numbers when you know them.",
           strict: true,
-          parameters: {
-            type: "object",
-            properties: {
-              query: { type: "string", description: "What to look for" },
-            },
-            required: ["query"],
-            additionalProperties: false,
+          inputSchema: z.object({ query: z.string().describe("What to look for") }),
+          execute: async ({ query }, { toolCallId }) => {
+            thought();
+            writer.write({
+              type: "data-recall",
+              id: toolCallId,
+              data: { query, running: true },
+            });
+            const turns = await recall(query);
+            writer.write({
+              type: "data-recall",
+              id: toolCallId,
+              data: { query, running: false },
+            });
+            since = performance.now();
+            return turns.join("\n\n") || "No earlier exchanges match.";
           },
-        },
-        run: async (args, callId) => {
-          const { query } = z.object({ query: z.string() }).parse(JSON.parse(args));
-          thought();
-          writer.write({
-            type: "data-recall",
-            id: callId,
-            data: { query, running: true },
-          });
-          const turns = await recall(query);
-          writer.write({
-            type: "data-recall",
-            id: callId,
-            data: { query, running: false },
-          });
-          since = performance.now();
-          return turns.join("\n\n") || "No earlier exchanges match.";
-        },
-      };
-      const patchTool: Tool = {
-        definition: {
-          type: "function",
-          name: "patch",
+        }),
+        patch: tool({
           description: PATCH_DESCRIPTION,
           strict: true,
-          parameters: {
-            type: "object",
-            properties: {
-              patchText: {
-                type: "string",
-                description:
-                  "The full patch text describing add, update, and delete operations",
-              },
-            },
-            required: ["patchText"],
-            additionalProperties: false,
-          },
-        },
-        run: async (args, callId) => {
-          const { patchText } = z
-            .object({ patchText: z.string() })
-            .parse(JSON.parse(args));
-          const data = { patch: patchText, running: true, output: "" };
-          thought();
-          writer.write({ type: "data-patch", id: callId, data });
-          let output: string;
-          try {
-            output = applyPatch(patchText);
-          } catch (error) {
-            output = `Patch failed: ${errorMessage(error)}`;
-          }
-          writer.write({
-            type: "data-patch",
-            id: callId,
-            data: { ...data, running: false, output },
-          });
-          since = performance.now();
-          return output;
-        },
-      };
-      const questionTool: Tool = {
-        definition: {
-          type: "function",
-          name: "question",
-          description: QUESTION_DESCRIPTION,
-          strict: true,
-          parameters: {
-            type: "object",
-            properties: {
-              questions: {
-                type: "array",
-                description: "Questions to ask",
-                items: {
-                  type: "object",
-                  properties: {
-                    question: { type: "string", description: "Complete question" },
-                    header: {
-                      type: "string",
-                      description: "Very short label (max 30 chars)",
-                    },
-                    options: {
-                      type: "array",
-                      description: "Available choices",
-                      items: {
-                        type: "object",
-                        properties: {
-                          label: {
-                            type: "string",
-                            description: "Display text (1-5 words, concise)",
-                          },
-                          description: {
-                            type: "string",
-                            description: "Explanation of choice",
-                          },
-                        },
-                        required: ["label", "description"],
-                        additionalProperties: false,
-                      },
-                    },
-                    multiple: {
-                      type: "boolean",
-                      description: "Allow selecting multiple choices",
-                    },
-                  },
-                  required: ["question", "header", "options", "multiple"],
-                  additionalProperties: false,
-                },
-              },
-            },
-            required: ["questions"],
-            additionalProperties: false,
-          },
-        },
-        run: async (args, callId) => {
-          const { questions } = z
-            .object({ questions: z.array(questionSchema).min(1) })
-            .parse(JSON.parse(args));
-          thought();
-          writer.write({
-            type: "data-question",
-            id: callId,
-            data: { questions, answers: null },
-          });
-          const answers = await new Promise<string[][]>((resolve) => {
-            pendingQuestions.set(callId, resolve);
-            signal.addEventListener("abort", () => resolve(questions.map(() => [])), {
-              once: true,
+          inputSchema: z.object({
+            patchText: z
+              .string()
+              .describe(
+                "The full patch text describing add, update, and delete operations",
+              ),
+          }),
+          execute: async ({ patchText }, { toolCallId }) => {
+            const data = { patch: patchText, running: true, output: "" };
+            thought();
+            writer.write({ type: "data-patch", id: toolCallId, data });
+            let output: string;
+            try {
+              output = applyPatch(patchText);
+            } catch (error) {
+              output = `Patch failed: ${errorMessage(error)}`;
+            }
+            writer.write({
+              type: "data-patch",
+              id: toolCallId,
+              data: { ...data, running: false, output },
             });
-          });
-          pendingQuestions.delete(callId);
-          writer.write({
-            type: "data-question",
-            id: callId,
-            data: { questions, answers },
-          });
-          since = performance.now();
-          const formatted = questions
-            .map(
-              (question, index) =>
-                `"${question.question}"="${answers[index]?.length ? answers[index].join(", ") : "Unanswered"}"`,
-            )
-            .join(", ");
-          return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`;
-        },
-      };
-      const scheduleTool: Tool = {
-        definition: {
-          type: "function",
-          name: "schedule",
+            since = performance.now();
+            return output;
+          },
+        }),
+        schedule: tool({
           description:
             "Schedule a moment to write to the user first, without waiting for them: a follow-up on an event they mentioned, a reminder before it, or a reminder they asked for. Call it on your own initiative whenever the user mentions something with a time or an outcome. At that time you get a <wakeup> with your note, and you decide then what to send, if anything.",
           strict: true,
-          parameters: {
-            type: "object",
-            properties: {
-              at: {
-                type: "string",
-                description:
-                  "When to wake up, as an ISO 8601 datetime with a timezone offset",
-              },
-              note: {
-                type: "string",
-                description:
-                  "What to do then, written for yourself with the context you'll need",
-              },
-            },
-            required: ["at", "note"],
-            additionalProperties: false,
+          inputSchema: z.object({
+            at: z.iso
+              .datetime({ offset: true })
+              .describe(
+                "When to wake up, as an ISO 8601 datetime with a timezone offset",
+              ),
+            note: z
+              .string()
+              .describe(
+                "What to do then, written for yourself with the context you'll need",
+              ),
+          }),
+          execute: async ({ at, note }, { toolCallId }) => {
+            thought();
+            writer.write({ type: "data-schedule", id: toolCallId, data: { at, note } });
+            insertWakeup(new Date(at).toISOString(), note);
+            since = performance.now();
+            return `Scheduled for ${localIso(new Date(at))}.`;
           },
-        },
-        run: async (args, callId) => {
-          const { at, note } = z
-            .object({ at: z.iso.datetime({ offset: true }), note: z.string() })
-            .parse(JSON.parse(args));
-          thought();
-          writer.write({ type: "data-schedule", id: callId, data: { at, note } });
-          insertWakeup(new Date(at).toISOString(), note);
-          since = performance.now();
-          return `Scheduled for ${localIso(new Date(at))}.`;
-        },
+        }),
+        question: tool({
+          description: QUESTION_DESCRIPTION,
+          strict: true,
+          inputSchema: z.object({
+            questions: z.array(questionSchema).min(1).describe("Questions to ask"),
+          }),
+          execute: async ({ questions }, { toolCallId }) => {
+            thought();
+            writer.write({
+              type: "data-question",
+              id: toolCallId,
+              data: { questions, answers: null },
+            });
+            const answers = await new Promise<string[][]>((resolve) => {
+              pendingQuestions.set(toolCallId, resolve);
+              signal.addEventListener("abort", () => resolve(questions.map(() => [])), {
+                once: true,
+              });
+            });
+            pendingQuestions.delete(toolCallId);
+            writer.write({
+              type: "data-question",
+              id: toolCallId,
+              data: { questions, answers },
+            });
+            since = performance.now();
+            const formatted = questions
+              .map(
+                (question, index) =>
+                  `"${question.question}"="${answers[index]?.length ? answers[index].join(", ") : "Unanswered"}"`,
+              )
+              .join(", ");
+            return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`;
+          },
+        }),
       };
-      const threadItems: Item[] = [];
-      const reply = await runAgent(
-        {
-          instructions: CHAT_PROMPT,
-          input: [...seedItems(history), userItem],
-          model: chatSettings.model,
-          effort: chatSettings.effort,
-          tools: [
-            shellTool,
-            readTool,
-            recallTool,
-            patchTool,
-            scheduleTool,
-            ...(wakeup ? [] : [questionTool]),
-          ],
-          webSearch: true,
-          steer: drain,
-          signal,
-          onEvent: (event) => {
-            const output = event.item;
-            if (
-              !output ||
-              (event.type !== "response.output_item.added" &&
-                event.type !== "response.output_item.done")
-            ) {
-              return;
-            }
-            const id = output.id ?? "";
-            const done = event.type === "response.output_item.done";
-            switch (output.type) {
-              case "reasoning": {
-                const summary = (output.summary ?? []).map((part) => part.text);
-                if (done && summary.length > 0) {
-                  writer.write({ type: "reasoning-start", id });
-                  writer.write({
-                    type: "reasoning-delta",
-                    id,
-                    delta: summary.join("\n\n"),
-                  });
-                  writer.write({ type: "reasoning-end", id });
-                }
-                break;
+      const seed = seedMessages(history);
+      const thread: ModelMessage[] = [userInput];
+      const usage = {
+        inputTokens: 0,
+        cachedTokens: 0,
+        outputTokens: 0,
+        reasoningTokens: 0,
+      };
+      let context = 0;
+      let text = "";
+      const summaries = new Set<string>();
+      const run = async (): Promise<void> => {
+        const result = streamText({
+          model: codex.responses(chatSettings.model),
+          providerOptions: codexOptions(CHAT_PROMPT, chatSettings.effort),
+          messages: [...seed, ...thread],
+          tools,
+          activeTools: wakeup
+            ? ["web_search", "shell", "read", "recall", "patch", "schedule"]
+            : undefined,
+          stopWhen: () => inbox.length > 0,
+          abortSignal: signal,
+          onStepEnd: (step) => {
+            thread.push(...step.response.messages);
+            const stepUsage = tokenUsage(step.usage);
+            usage.inputTokens += stepUsage.inputTokens;
+            usage.cachedTokens += stepUsage.cachedTokens;
+            usage.outputTokens += stepUsage.outputTokens;
+            usage.reasoningTokens += stepUsage.reasoningTokens;
+            context = stepUsage.inputTokens + stepUsage.outputTokens;
+            text = step.text;
+          },
+        });
+        for await (const part of result.fullStream) {
+          switch (part.type) {
+            case "reasoning-delta":
+              if (part.text && !summaries.has(part.id)) {
+                summaries.add(part.id);
+                writer.write({ type: "reasoning-start", id: part.id });
               }
-              case "message":
-                if (done) {
-                  thought();
-                  writer.write({
-                    type: "text-start",
-                    id,
-                    providerMetadata: { codex: { phase: output.phase ?? null } },
-                  });
-                  writer.write({
-                    type: "text-delta",
-                    id,
-                    delta: (output.content ?? []).map((part) => part.text ?? "").join(""),
-                  });
-                  writer.write({ type: "text-end", id });
-                  since = performance.now();
-                }
-                break;
-              case "web_search_call": {
+              if (part.text) {
+                writer.write({ type: "reasoning-delta", id: part.id, delta: part.text });
+              }
+              break;
+            case "reasoning-end":
+              if (summaries.has(part.id)) {
+                writer.write({ type: "reasoning-end", id: part.id });
+              }
+              break;
+            case "text-start":
+              thought();
+              writer.write({
+                type: "text-start",
+                id: part.id,
+                providerMetadata: {
+                  codex: { phase: part.providerMetadata!.openai.phase },
+                },
+              });
+              break;
+            case "text-delta":
+              writer.write({ type: "text-delta", id: part.id, delta: part.text });
+              break;
+            case "text-end":
+              writer.write({ type: "text-end", id: part.id });
+              since = performance.now();
+              break;
+            case "tool-input-start":
+              if (part.toolName === "web_search") {
                 thought();
                 writer.write({
                   type: "data-search",
-                  id,
-                  data: {
-                    query: output.action?.query ?? "",
-                    url: output.action?.url,
-                    running: !done,
-                  },
+                  id: part.id,
+                  data: { query: "", running: true },
                 });
-                if (done) {
-                  since = performance.now();
-                }
-                break;
               }
-              default:
-                break;
-            }
-          },
-        },
-        threadItems,
-      ).catch((error: unknown) => {
-        if (!signal.aborted) {
-          throw error;
+              break;
+            case "tool-result":
+              if (!part.dynamic && part.toolName === "web_search") {
+                const action = part.output.action!;
+                writer.write({
+                  type: "data-search",
+                  id: part.toolCallId,
+                  data:
+                    action.type === "search"
+                      ? { query: action.query!, running: false }
+                      : { query: "", url: action.url, running: false },
+                });
+                since = performance.now();
+              }
+              break;
+            case "error":
+              throw part.error;
+            default:
+              break;
+          }
         }
-        return null;
-      });
+        const steered = signal.aborted ? [] : drain();
+        if (steered.length > 0) {
+          thread.push(...steered);
+          await run();
+        }
+      };
+      await run();
       turn.steer = null;
-      if (!reply && wakeup) {
+      if (signal.aborted && wakeup) {
         return;
       }
-      if (!reply) {
+      if (signal.aborted) {
         writer.write({ type: "data-stopped", data: {} });
         writer.write({ type: "finish" });
         items = [
-          userItem,
-          ...threadItems,
+          ...thread,
           ...drain(),
           {
-            type: "message",
             role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: "[The user stopped your previous response before it finished.]",
-              },
-            ],
+            content: "[The user stopped your previous response before it finished.]",
           },
         ];
         return;
       }
       const chatUsage = {
-        ...reply.usage,
+        ...usage,
         ms: Math.round(performance.now() - chatStarted),
       };
 
@@ -721,14 +633,14 @@ function runTurn(
           retrievalMs,
           chat: chatUsage,
           curation: null,
-          context: reply.context,
+          context,
           chatModel: chatSettings.model,
           chatEffort: chatSettings.effort,
         },
       });
       writer.write({ type: "finish" });
-      items = [userItem, ...reply.items];
-      silent = wakeup !== null && reply.text.trim() === SILENT;
+      items = thread;
+      silent = wakeup !== null && text.trim() === SILENT;
       finishTurn = async (message) => {
         const parts: RemanenceUIMessage["parts"] = [];
         let curationUsage: CallUsage | null = null;
@@ -759,7 +671,7 @@ function runTurn(
           }
         }
 
-        if (reply.context > CONTEXT_WINDOW) {
+        if (context > CONTEXT_WINDOW) {
           try {
             const compaction = await archiveConversation(history);
             if (compaction) {

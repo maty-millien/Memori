@@ -50,13 +50,13 @@ flowchart TB
 
     subgraph agent ["<b>3. Agent loop</b>"]
         direction LR
-        input["<b>Model input</b><br/>Static instructions<br/>+ stored items of the live replies,<br/>reasoning and tool outputs included<br/>+ the new prompt<br/>Sent stateless, store: false<br/><i>reads thread_items</i>"] --> codex["<b>Codex Responses</b><br/>One tool call at a time"]
+        input["<b>Model input</b><br/>Static instructions<br/>+ stored model messages of the live replies,<br/>reasoning and tool outputs included<br/>+ the new prompt<br/>Sent stateless, store: false<br/><i>reads thread_items</i>"] --> codex["<b>Codex Responses</b><br/>One tool call at a time"]
         codex <-->|tool call| tools["<b>Tools</b><br/>shell, read, patch<br/>question: waits for the user's answer, not on wakeups<br/>schedule: plans a wakeup <i>writes wakeups</i><br/>web_search: hosted by OpenAI"]
         codex <-->|tool call| recall["<b>recall</b><br/>Top 20 by meaning + top 20 by keywords<br/>fused by rank, keep 5<br/><i>reads archived_turns + FTS5 index</i>"]
         codex -->|user steers: added<br/>before the next call| codex
         codex -->|user stops| stopped["<b>Stopped</b><br/>Save the partial turn with a stop note<br/>Skip curation and compaction"]
         codex -->|final reply| stream["<b>Stream</b><br/>Send the reply to the UI"]
-        stream --> save["<b>Save</b><br/>Delete the wakeup, move the check-in 6 hours out<br/>Drop a SILENT wakeup reply<br/>Otherwise save the user message, reply with its trace,<br/>and the reply's raw items<br/>Tell open tabs about a wakeup reply<br/><i>writes wakeups, messages, thread_items</i>"]
+        stream --> save["<b>Save</b><br/>Delete the wakeup, move the check-in 6 hours out<br/>Drop a SILENT wakeup reply<br/>Otherwise save the user message, reply with its trace,<br/>and the reply's model messages<br/>Tell open tabs about a wakeup reply<br/><i>writes wakeups, messages, thread_items</i>"]
     end
 
     agent -->|wakeup reply| overflow
@@ -75,7 +75,7 @@ flowchart TB
 
     subgraph compaction ["<b>5. Compaction, in the background</b>"]
         direction LR
-        oldest["<b>Split</b><br/>Live messages before this turn,<br/>weighted by stored item size<br/>Take the oldest half,<br/>cut before a user message"] --> summarize["<b>Summarize</b><br/>Codex summary, 300 words max<br/>Goals, decisions, artifacts,<br/>failed attempts, open items<br/>Embedded<br/><i>writes conversations</i>"]
+        oldest["<b>Split</b><br/>Live messages before this turn,<br/>weighted by stored message size<br/>Take the oldest half,<br/>cut before a user message"] --> summarize["<b>Summarize</b><br/>Codex summary, 300 words max<br/>Goals, decisions, artifacts,<br/>failed attempts, open items<br/>Embedded<br/><i>writes conversations</i>"]
         oldest --> turns["<b>Archive exchanges</b><br/>One transcript per user message<br/>and its replies, embedded<br/><i>writes archived_turns + FTS5 index</i>"]
         oldest --> assign["<b>Retire messages</b><br/>Tag them with the conversation id,<br/>they leave the live thread<br/><i>writes messages</i>"]
     end
@@ -127,7 +127,7 @@ bun run dev
 
 <br>
 
-The server runs its own agent loop against the Codex Responses endpoint (`chatgpt.com/backend-api/codex/responses`), the same one the Codex CLI uses, with `store: false`. It reads the tokens from `~/.codex/auth.json` (or `$CODEX_HOME/auth.json`) and writes refreshed tokens back to it. The endpoint is undocumented, so an OpenAI change can break it.
+The server runs the agent loop with the AI SDK's `streamText` and its OpenAI provider, pointed at the Codex Responses endpoint (`chatgpt.com/backend-api/codex/responses`), the same one the Codex CLI uses, with `store: false`. The endpoint only accepts streaming requests, so every call uses `streamText`. The server reads the tokens from `~/.codex/auth.json` (or `$CODEX_HOME/auth.json`) and writes refreshed tokens back to it. The endpoint is undocumented, so an OpenAI change can break it.
 
 The chat reply uses the model and reasoning effort picked in the composer. Curation and summaries use `gpt-6-luna` at `low`. Retrieval and ranking settings are in [`config.ts`](../src/features/memories/server/config.ts), and data lives in `.remanence/remanence.db`. `bun run check` formats, lints, and type checks.
 

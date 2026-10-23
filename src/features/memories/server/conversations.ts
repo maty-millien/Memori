@@ -51,8 +51,8 @@ export async function archiveConversation(history: RemanenceUIMessage[]) {
       createdAt: turn[0].metadata?.createdAt ?? new Date().toISOString(),
     }))
     .filter((turn) => turn.content);
-  const [{ text }, embeddings] = await Promise.all([
-    runOnce(SUMMARY_PROMPT, log),
+  const [text, embeddings] = await Promise.all([
+    runOnce(SUMMARY_PROMPT, log).text,
     embed(
       indexed.map((turn) => turn.content),
       "document",
