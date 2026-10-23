@@ -75,6 +75,7 @@ async function codexFetch(input: string | URL | Request, init: RequestInit = {})
   headers.set("Authorization", `Bearer ${tokens.access_token}`);
   headers.set("chatgpt-account-id", tokens.account_id);
   headers.set("originator", "codex_cli_rs");
+  headers.set("session_id", "remanence");
   return fetch(input, { ...init, headers });
 }
 
